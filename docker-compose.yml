@@ -1,0 +1,32 @@
+services:
+  pluggy-firefly-sync:
+    build: .
+    container_name: pluggy-firefly-sync
+    restart: unless-stopped
+    # host: pra "umbrel.local" resolver igual resolveria rodando direto no Pi.
+    # Se der erro de conexão com o Firefly, troque por "bridge" e ajuste
+    # FIREFLY_BASE_URL no .env pro nome do container do Firefly na rede do
+    # Umbrel (ex: http://firefly_iii_web_1:80) — não tenho como confirmar
+    # esse nome sem ver o seu Portainer, me manda a lista de containers que
+    # eu te ajudo a achar o certo.
+    network_mode: host
+    # As variáveis abaixo NÃO vêm de um arquivo .env dentro do repositório
+    # (o .env com suas chaves reais nunca deve ir pro GitHub). Elas são
+    # substituídas pelos valores cadastrados na própria tela do Portainer
+    # (Stacks → pluggy-firefly-sync → Environment variables), então os
+    # segredos ficam só no Portainer, nunca no Git.
+    environment:
+      PLUGGY_CLIENT_ID: ${PLUGGY_CLIENT_ID}
+      PLUGGY_CLIENT_SECRET: ${PLUGGY_CLIENT_SECRET}
+      FIREFLY_BASE_URL: ${FIREFLY_BASE_URL}
+      FIREFLY_TOKEN: ${FIREFLY_TOKEN}
+      NOTIFY_CHANNEL: ${NOTIFY_CHANNEL}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      MONTHLY_SAVINGS_TARGET: ${MONTHLY_SAVINGS_TARGET}
+      SAFETY_BUFFER: ${SAFETY_BUFFER}
+    volumes:
+      - ./account_mapping.json:/app/account_mapping.json:ro
+      - ./category_rules.json:/app/category_rules.json:ro
+      - ./logs:/app/logs

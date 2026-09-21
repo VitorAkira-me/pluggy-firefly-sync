@@ -1,0 +1,35 @@
+{
+  "_comment": "Ligue cada conta/cartão que você conectar na Pluggy ao id da conta correspondente no Firefly III. Descubra o id da conta da Pluggy rodando 'python sync.py --list-accounts' depois de configurar o .env. Os ids do Firefly abaixo são os que já existiam no seu levantamento de set/2026 (confira se mudaram).",
+  "mappings": [
+    {
+      "pluggy_account_id": "PREENCHER",
+      "pluggy_account_name": "Itaú Click (exemplo)",
+      "firefly_account_id": 5,
+      "firefly_account_name": "Itaú Click"
+    },
+    {
+      "pluggy_account_id": "PREENCHER",
+      "pluggy_account_name": "Bradesco Casas Bahia (exemplo)",
+      "firefly_account_id": 6,
+      "firefly_account_name": "Bradesco Casas Bahia"
+    },
+    {
+      "pluggy_account_id": "PREENCHER",
+      "pluggy_account_name": "Bradesco Black (exemplo)",
+      "firefly_account_id": 7,
+      "firefly_account_name": "Bradesco Black"
+    },
+    {
+      "pluggy_account_id": "PREENCHER",
+      "pluggy_account_name": "Mercado Pago (exemplo)",
+      "firefly_account_id": 13,
+      "firefly_account_name": "Mercado Pago"
+    },
+    {
+      "pluggy_account_id": "PREENCHER",
+      "pluggy_account_name": "Conta corrente (exemplo)",
+      "firefly_account_id": 15,
+      "firefly_account_name": "Conta corrente"
+    }
+  ]
+}
