@@ -1,8 +1,16 @@
 """Busca transações novas na Pluggy e cria no Firefly III, sem duplicar.
 
 Uso:
-    python sync.py                  # sincroniza normalmente
-    python sync.py --list-accounts  # só lista as contas da Pluggy (pra preencher account_mapping.json)
+    python sync.py                                    # sincroniza normalmente
+    python sync.py --list-accounts <item_id> [...]     # lista as contas de um ou mais itens
+                                                        # (pra preencher account_mapping.json)
+
+Sobre o --list-accounts: a Pluggy não tem endpoint pra "listar todos os
+itens da aplicação" (é proposital, por segurança — ver pluggy_client.py).
+Então o(s) item_id precisa(m) vir do Dashboard: dashboard.pluggy.ai →
+sua aplicação → "Itens Conectados" → clica no item → o id aparece no
+topo da tela de detalhes (ex: 6e9e93cd-4438-498c-b0ba-f8ba...). Copia um
+id por banco conectado e passa todos na linha de comando.
 """
 import sys
 
@@ -11,8 +19,13 @@ from firefly_client import FireflyClient
 from pluggy_client import PluggyClient
 
 
-def list_accounts(pluggy: PluggyClient) -> None:
-    for item in pluggy.list_items():
+def list_accounts(pluggy: PluggyClient, item_ids: list[str]) -> None:
+    if not item_ids:
+        print("Uso: python sync.py --list-accounts <item_id> [<item_id> ...]")
+        print("Os item_id vêm do Dashboard (dashboard.pluggy.ai → aplicação → Itens Conectados).")
+        return
+    for item_id in item_ids:
+        item = pluggy.get_item(item_id)
         print(f"Item (conexão) {item['id']} — {item.get('connector', {}).get('name')}")
         for acc in pluggy.list_accounts(item["id"]):
             print(f"  conta {acc['id']} — {acc['name']} ({acc['type']}/{acc['subtype']})")
@@ -41,9 +54,14 @@ def sync() -> None:
             rule = guess_category(description)
 
             # Na Pluggy, valor negativo = saída da conta (despesa); positivo = entrada (receita).
-            # Isso é o padrão pra contas correntes; cartão de crédito costuma vir invertido —
-            # TODO: confirme o sinal assim que os primeiros dados reais chegarem, e ajuste aqui
-            # se notar despesas do cartão aparecendo como receita (ou vice-versa).
+            # Isso é o padrão pra contas correntes. Cartão de crédito vem invertido: positivo é
+            # compra (aumenta a dívida), negativo é pagamento/estorno (reduz a dívida). Confirmado
+            # com dados reais em 21/09/2026 (compras de cartão chegavam como positivas e viravam
+            # "deposit" errado). account_mapping.json marca cada conta com "is_credit_card" pra
+            # sabermos quando inverter o sinal antes de decidir o tipo da transação.
+            if target.get("is_credit_card"):
+                amount = -amount
+
             if amount < 0:
                 type_ = "withdrawal"
                 source_id = target["firefly_account_id"]
@@ -90,6 +108,8 @@ def sync() -> None:
 if __name__ == "__main__":
     if "--list-accounts" in sys.argv:
         s = load_settings()
-        list_accounts(PluggyClient(s.pluggy_client_id, s.pluggy_client_secret))
+        idx = sys.argv.index("--list-accounts")
+        item_ids = sys.argv[idx + 1:]
+        list_accounts(PluggyClient(s.pluggy_client_id, s.pluggy_client_secret), item_ids)
     else:
         sync()
