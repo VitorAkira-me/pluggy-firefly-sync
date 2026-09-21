@@ -1,35 +1,68 @@
 {
-  "_comment": "Ligue cada conta/cartão que você conectar na Pluggy ao id da conta correspondente no Firefly III. Descubra o id da conta da Pluggy rodando 'python sync.py --list-accounts' depois de configurar o .env. Os ids do Firefly abaixo são os que já existiam no seu levantamento de set/2026 (confira se mudaram).",
+  "_comment": "Mapeamento entre contas da Pluggy (Open Finance) e contas do Firefly III. Preenchido com os dados reais em 21/09/2026, obtidos via 'python3 sync.py --list-accounts <item_ids>'. O cartão MASTER BLACK PRIME aparece duplicado na Pluggy (item Bradesco e item BradescoCard) porque é o mesmo cartão físico — só a conta do item Bradesco (fdbba10b-...) é mapeada aqui, a do item BradescoCard (8d6b321a-...) fica de fora de propósito para não duplicar transações. A poupança do Bradesco (90ff1f3b-...) também ficou de fora até o Akira validar se é conta real ou de teste. 'is_credit_card' controla a inversão de sinal em sync.py (compra no cartão vem positiva na Pluggy, precisa virar despesa/withdrawal) — confirmado com dados reais em 21/09/2026.",
   "mappings": [
     {
-      "pluggy_account_id": "PREENCHER",
-      "pluggy_account_name": "Itaú Click (exemplo)",
-      "firefly_account_id": 5,
-      "firefly_account_name": "Itaú Click"
+      "pluggy_account_id": "2658fecc-8499-4af3-a88f-8d80f8164ac4",
+      "pluggy_account_name": "Nubank platinum",
+      "firefly_account_id": 11,
+      "firefly_account_name": "Nubank",
+      "is_credit_card": true
     },
     {
-      "pluggy_account_id": "PREENCHER",
-      "pluggy_account_name": "Bradesco Casas Bahia (exemplo)",
-      "firefly_account_id": 6,
-      "firefly_account_name": "Bradesco Casas Bahia"
-    },
-    {
-      "pluggy_account_id": "PREENCHER",
-      "pluggy_account_name": "Bradesco Black (exemplo)",
-      "firefly_account_id": 7,
-      "firefly_account_name": "Bradesco Black"
-    },
-    {
-      "pluggy_account_id": "PREENCHER",
-      "pluggy_account_name": "Mercado Pago (exemplo)",
+      "pluggy_account_id": "d8f82498-c707-462f-94cd-e2c900c28099",
+      "pluggy_account_name": "Mercado Pago cartão",
       "firefly_account_id": 13,
-      "firefly_account_name": "Mercado Pago"
+      "firefly_account_name": "Mercado Pago",
+      "is_credit_card": true
     },
     {
-      "pluggy_account_id": "PREENCHER",
-      "pluggy_account_name": "Conta corrente (exemplo)",
-      "firefly_account_id": 15,
-      "firefly_account_name": "Conta corrente"
+      "pluggy_account_id": "7fff8c98-70ad-418b-9b1f-43763f3f2808",
+      "pluggy_account_name": "Itaú Click Múltiplo MC Plat",
+      "firefly_account_id": 5,
+      "firefly_account_name": "Itaú Click",
+      "is_credit_card": true
+    },
+    {
+      "pluggy_account_id": "fdbba10b-b9a6-4acf-a4bf-27c9d5c06837",
+      "pluggy_account_name": "MASTER BLACK PRIME",
+      "firefly_account_id": 7,
+      "firefly_account_name": "Bradesco Black",
+      "is_credit_card": true
+    },
+    {
+      "pluggy_account_id": "50871713-f25d-4ffb-8874-ae7b949314aa",
+      "pluggy_account_name": "CASAS BAHIA VISA PLATINUM",
+      "firefly_account_id": 6,
+      "firefly_account_name": "Bradesco Casas Bahia",
+      "is_credit_card": true
+    },
+    {
+      "pluggy_account_id": "fddea030-7c7f-4b22-9f03-751f9af73573",
+      "pluggy_account_name": "Nu Pagamentos S.A. - Instituição de Pagamento",
+      "firefly_account_id": 29,
+      "firefly_account_name": "Nubank Conta Corrente",
+      "is_credit_card": false
+    },
+    {
+      "pluggy_account_id": "4989c6da-193b-477a-a1e9-ae54c9f5a00e",
+      "pluggy_account_name": "Mercado Pago",
+      "firefly_account_id": 30,
+      "firefly_account_name": "Mercado Pago Conta Corrente",
+      "is_credit_card": false
+    },
+    {
+      "pluggy_account_id": "6e051380-d862-43d4-8d4c-66d0e57de3d4",
+      "pluggy_account_name": "itau",
+      "firefly_account_id": 31,
+      "firefly_account_name": "Itau Conta Corrente",
+      "is_credit_card": false
+    },
+    {
+      "pluggy_account_id": "df04f103-f7eb-473a-8625-23b3e059b3e8",
+      "pluggy_account_name": "Banco Bradesco",
+      "firefly_account_id": 32,
+      "firefly_account_name": "Bradesco Conta Corrente",
+      "is_credit_card": false
     }
   ]
 }

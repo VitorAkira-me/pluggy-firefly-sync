@@ -33,26 +33,41 @@ class PluggyClient:
         resp.raise_for_status()
         return resp.json()
 
-    def list_items(self) -> list:
-        """Cada 'item' é uma conexão com um banco (ex: Itaú, Bradesco)."""
-        return self._get("/items")["results"]
+    def get_item(self, item_id: str) -> dict:
+        """Busca um item (conexão com um banco) pelo id.
+
+        A Pluggy não oferece um "listar todos os itens" por segurança (a doc
+        oficial é explícita sobre isso: "Listing existing connections is not
+        provided due to security reasons"). Por isso não existe um
+        list_items() — o item_id precisa ser copiado do Dashboard
+        (dashboard.pluggy.ai → aplicação → Itens Conectados) uma vez, e a
+        partir daí o próprio script guarda esse id.
+        """
+        return self._get(f"/items/{item_id}")
 
     def list_accounts(self, item_id: str | None = None) -> list:
         params = {"itemId": item_id} if item_id else {}
         return self._get("/accounts", params)["results"]
 
     def list_transactions(self, account_id: str, since_days: int = 7) -> list:
-        """Traz transações dos últimos N dias (padrão 7, cobre folgas de sincronização)."""
+        """Traz transações dos últimos N dias (padrão 7, cobre folgas de sincronização).
+
+        Usa /v2/transactions (paginação por cursor). O antigo GET /transactions
+        (paginação por página, "from"/"page"/"pageSize") foi descontinuado pela
+        Pluggy — passou a responder 410 Gone. A doc oficial já mostra ele como
+        "List by Page (deprecated)" e recomenda o /v2/transactions no lugar.
+        """
         date_from = (date.today() - timedelta(days=since_days)).isoformat()
         results = []
-        page = 1
+        path = "/v2/transactions"
+        params = {"accountId": account_id, "dateFrom": date_from}
         while True:
-            data = self._get(
-                "/transactions",
-                {"accountId": account_id, "from": date_from, "page": page, "pageSize": 500},
-            )
+            data = self._get(path, params)
             results.extend(data["results"])
-            if page >= data.get("totalPages", 1):
+            next_qs = data.get("next")
+            if not next_qs:
                 break
-            page += 1
+            # "next" já vem como query string pronta: GET /v2/transactions{next}
+            path = "/v2/transactions" + next_qs
+            params = None
         return results
