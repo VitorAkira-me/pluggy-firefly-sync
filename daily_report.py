@@ -13,19 +13,30 @@ Canal de envio (NOTIFY_CHANNEL no .env):
 import calendar
 from datetime import date
 
-from config import load_settings
+from config import load_account_mapping, load_settings
 from firefly_client import FireflyClient
 from telegram_notify import send_telegram_message
 from webhook_notify import send_webhook
 
-CONTA_CORRENTE_ID = 15  # ajuste se o id da sua conta corrente no Firefly mudar
+
+def get_checking_account_ids(mapping: dict) -> list[int]:
+    """Ids das contas correntes reais (não cartão) no Firefly, derivados do
+    account_mapping.json. Antes isso era um id fixo (CONTA_CORRENTE_ID = 15,
+    a conta genérica antiga que ficou obsoleta com a integração da Pluggy) —
+    trocado por isso pra não depender de um id parado no tempo: se um banco
+    novo entrar no account_mapping.json, o relatório já soma ele também.
+    """
+    ids = {m["firefly_account_id"] for m in mapping.values() if not m.get("is_credit_card")}
+    return sorted(ids)
 
 
 def fmt_brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 
-def compute_report(firefly: FireflyClient, monthly_savings_target: float, safety_buffer: float) -> dict:
+def compute_report(
+    firefly: FireflyClient, mapping: dict, monthly_savings_target: float, safety_buffer: float
+) -> dict:
     """Retorna os números crus (não o texto formatado), pra quem for enviar
     escolher o formato: texto simples, cartão do WhatsApp, JSON pro n8n, etc.
     """
@@ -33,8 +44,10 @@ def compute_report(firefly: FireflyClient, monthly_savings_target: float, safety
     days_in_month = calendar.monthrange(today.year, today.month)[1]
     days_remaining = days_in_month - today.day + 1  # inclui hoje
 
-    account = firefly.get_account(CONTA_CORRENTE_ID)
-    balance = float(account["attributes"]["current_balance"])
+    checking_ids = get_checking_account_ids(mapping)
+    balance = sum(
+        float(firefly.get_account(acc_id)["attributes"]["current_balance"]) for acc_id in checking_ids
+    )
 
     due = firefly.list_recurring_due_this_month()
     total_due = sum(item["amount"] for item in due)
@@ -51,9 +64,11 @@ def compute_report(firefly: FireflyClient, monthly_savings_target: float, safety
         "free_to_spend_today": round(free_to_spend_today, 2),
         "save_today": round(save_today, 2),
         "note": (
-            "Cálculo por saldo total, ainda não considera orçamento por categoria "
-            "(pendente configurar Orçamentos no Firefly). Não inclui a parte do "
-            "Bradesco Black (fatura conjunta, ajuste manual mensal)."
+            "Saldo somado das contas correntes conectadas via Pluggy "
+            f"({len(checking_ids)} conta(s)). Cálculo por saldo total, ainda não "
+            "considera orçamento por categoria (pendente configurar Orçamentos no "
+            "Firefly). Não inclui a parte do Bradesco Black (fatura conjunta, "
+            "ajuste manual mensal)."
         ),
     }
 
@@ -77,8 +92,9 @@ def format_report_text(report: dict) -> str:
 
 if __name__ == "__main__":
     settings = load_settings()
+    mapping = load_account_mapping()
     firefly = FireflyClient(settings.firefly_base_url, settings.firefly_token)
-    report = compute_report(firefly, settings.monthly_savings_target, settings.safety_buffer)
+    report = compute_report(firefly, mapping, settings.monthly_savings_target, settings.safety_buffer)
     text = format_report_text(report)
     print(text)
 
