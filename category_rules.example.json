@@ -1,0 +1,18 @@
+{
+  "_comment": "Regras aplicadas em ordem, na descrição da transação (case-insensitive, 'contém'). A primeira que bater define categoria e conta de despesa/receita sugerida. Ajuste livremente: é mais rápido corrigir uma regra errada do que categorizar tudo à mão todo mês.",
+  "rules": [
+    {"match": "amazon prime", "category": "Assinaturas", "expense_account": "Amazon Prime Video"},
+    {"match": "claude.ai", "category": "Assinaturas", "expense_account": "Claude"},
+    {"match": "crunchyroll", "category": "Assinaturas", "expense_account": "Crunchyroll"},
+    {"match": "icloud", "category": "Assinaturas", "expense_account": "iCloud+"},
+    {"match": "apple.com/bill", "category": "Assinaturas", "expense_account": "iCloud+"},
+    {"match": "vivo", "category": "Assinaturas", "expense_account": "Conta Vivo (Internet + TV)"},
+    {"match": "fiap", "category": "Educação", "expense_account": "Pós-graduação FIAP"},
+    {"match": "ifood", "category": "Alimentação"},
+    {"match": "uber", "category": "Transporte"},
+    {"match": "posto", "category": "Transporte"},
+    {"match": "mercado", "category": "Mercado"},
+    {"match": "farmacia", "category": "Saúde"},
+    {"match": "farmácia", "category": "Saúde"}
+  ]
+}
