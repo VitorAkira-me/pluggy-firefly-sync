@@ -1,0 +1,24 @@
+name: Validar account_mapping.json
+
+on:
+  push:
+    paths:
+      - account_mapping.json
+      - scripts/validate_account_mapping.py
+  pull_request:
+    paths:
+      - account_mapping.json
+      - scripts/validate_account_mapping.py
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/validate_account_mapping.py
