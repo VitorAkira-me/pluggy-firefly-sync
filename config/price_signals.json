@@ -1,0 +1,9 @@
+{
+  "_comment": "Limiares do semáforo de compra por impulso (app/price_signals.py). Só ALTA dispara alerta. Ajustados em 23/09/2026 para mais sensível.",
+  "usd_week_change_yellow_pct": 0.75,
+  "usd_week_change_red_pct": 1.5,
+  "fuel_week_change_yellow_pct": 0.5,
+  "fuel_week_change_red_pct": 1.5,
+  "ipca_mensal_yellow_pct": 0.2,
+  "ipca_mensal_red_pct": 0.3
+}

@@ -1,0 +1,194 @@
+{
+  "_comment": "'rules': texto contido na descrição (sem diferenciar maiúsculas) -> categoria; a primeira que bater vence. 'internal': textos que marcam movimentação entre contas próprias (pagamento de fatura, Pix no crédito, aplicação automática); viram categoria 'Transferência interna' e ficam fora de todo relatório. Pagamentos de fatura também são achados por pareamento de valor.",
+  "rules": [
+    {
+      "match": "amazon prime",
+      "category": "Assinaturas",
+      "expense_account": "Amazon Prime Video"
+    },
+    {
+      "match": "claude.ai",
+      "category": "Assinaturas",
+      "expense_account": "Claude"
+    },
+    {
+      "match": "crunchyroll",
+      "category": "Assinaturas",
+      "expense_account": "Crunchyroll"
+    },
+    {
+      "match": "icloud",
+      "category": "Assinaturas",
+      "expense_account": "iCloud+"
+    },
+    {
+      "match": "apple.com/bill",
+      "category": "Assinaturas",
+      "expense_account": "iCloud+"
+    },
+    {
+      "match": "vivo",
+      "category": "Assinaturas",
+      "expense_account": "Conta Vivo (Internet + TV)"
+    },
+    {
+      "match": "fiap",
+      "category": "Educação",
+      "expense_account": "Pós-graduação FIAP"
+    },
+    {
+      "match": "ifood",
+      "category": "Alimentação"
+    },
+    {
+      "match": "uber",
+      "category": "Transporte"
+    },
+    {
+      "match": "posto",
+      "category": "Transporte"
+    },
+    {
+      "match": "farmacia",
+      "category": "Saúde"
+    },
+    {
+      "match": "farmácia",
+      "category": "Saúde"
+    },
+    {
+      "match": "ikigaipastry",
+      "category": "Alimentação"
+    },
+    {
+      "match": "nui kitchen",
+      "category": "Alimentação"
+    },
+    {
+      "match": "mister donuts",
+      "category": "Alimentação"
+    },
+    {
+      "match": "oxxo",
+      "category": "Alimentação"
+    },
+    {
+      "match": "zaffari",
+      "category": "Mercado"
+    },
+    {
+      "match": "doctoralia",
+      "category": "Saúde"
+    },
+    {
+      "match": "rend pago aplic",
+      "category": "Rendimentos"
+    },
+    {
+      "match": "copag",
+      "category": "Pokémon TCG"
+    },
+    {
+      "match": "misplei",
+      "category": "Pokémon TCG"
+    },
+    {
+      "match": "ri happy",
+      "category": "Pokémon TCG"
+    },
+    {
+      "match": "anthropic",
+      "category": "Assinaturas",
+      "expense_account": "Claude"
+    },
+    {
+      "match": "iof internacional",
+      "category": "Assinaturas"
+    },
+    {
+      "match": "raia",
+      "category": "Saúde"
+    },
+    {
+      "match": "drogaria",
+      "category": "Saúde"
+    },
+    {
+      "match": "vstp educacao",
+      "category": "Educação",
+      "expense_account": "Pós-graduação FIAP"
+    },
+    {
+      "match": "winpark",
+      "category": "Transporte"
+    },
+    {
+      "match": "estacionamento",
+      "category": "Transporte"
+    },
+    {
+      "match": "terabyteshop",
+      "category": "Compras"
+    },
+    {
+      "match": "aliexpress",
+      "category": "Compras"
+    },
+    {
+      "match": "epic game",
+      "category": "Lazer"
+    },
+    {
+      "match": "supermercado",
+      "category": "Mercado"
+    },
+    {
+      "match": "hipermercado",
+      "category": "Mercado"
+    },
+    {
+      "match": "hiper ",
+      "category": "Mercado"
+    },
+    {
+      "match": "atacad",
+      "category": "Mercado"
+    },
+    {
+      "match": "mercado livre",
+      "category": "Compras"
+    }
+  ],
+  "internal": [
+    "pagamento de fatura",
+    "fatura paga",
+    "pagamento com saldo",
+    "pagamento recebido",
+    "pagamento efetuado",
+    "crédito liberado para pix",
+    "credito liberado para pix",
+    "pix enviado com cartão",
+    "pix enviado com cartao",
+    "bradescard",
+    "resgate res aplic",
+    "aplicacao aut",
+    "aplicação aut"
+  ],
+  "categories": [
+    "Alimentação",
+    "Mercado",
+    "Transporte",
+    "Saúde",
+    "Educação",
+    "Assinaturas",
+    "Moradia",
+    "Lazer",
+    "Compras",
+    "Pokémon TCG",
+    "Cuidados pessoais",
+    "Presentes",
+    "Serviços",
+    "Taxas e juros",
+    "Rendimentos"
+  ]
+}

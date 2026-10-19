@@ -1,84 +1,104 @@
-# Pluggy → Firefly III: sincronização automática + relatório diário
+# personal-finance
 
-Automatiza duas coisas que hoje dependem de você lembrar de fazer manualmente:
+Finanças pessoais automáticas e self-hosted: **Pluggy (Open Finance) → Firefly III → Telegram**,
+com classificação inteligente e análise semanal feitas por uma **IA local** (GPU de casa,
+nada sai da rede). Regras e decisões completas: [`CLAUDE.md`](CLAUDE.md).
 
-1. **Sincronizar transações reais dos seus bancos/cartões para o Firefly III**, via Open Finance (Meu Pluggy, gratuito para uso pessoal).
-2. **Enviar todo dia, por Telegram, quanto você pode gastar e quanto deve guardar hoje**, com base no saldo real e nas contas que ainda vão vencer no mês.
+```
+Bancos ─► Pluggy ─► sync (3/3h): internas, parcelas, regra → histórico → ML ─► Firefly III
+                                                                              │
+         revisão 03:00 (LLM local) · resumo + gestor 05:00 · semana (dom) ◄───┘
+                                         │
+                       Telegram ◄───────►│ bot: /fatura /gasto /revisar /hoje /simular, perguntas
+```
 
-Roda como container Docker no Raspberry Pi/Umbrel, gerenciado pelo Portainer (não como script solto via cron do sistema — essa era a ideia original, mas não persiste entre atualizações do Umbrel).
+## Como você recebe e como você atualiza
 
-## Status atual: sincronização real funcionando de ponta a ponta (21/09/2026)
+Tudo pelo Telegram (@akira_financas_bot). Poucas mensagens fixas, o resto sob demanda:
 
-- Código no GitHub: `https://github.com/VitorAkira-me/pluggy-firefly-sync` (repositório público, sem segredos — as chaves ficam só no Portainer).
-- Stack `pluggy-firefly-sync` rodando no Portainer do Umbrel (`http://umbrel.local:9000`), **desanexada do Git**. Qualquer mudança precisa ser feita direto no container (Console do Portainer) ou reanexando a stack ao Git.
-- Container: **Running**, sem crash-loop.
-- **`account_mapping.json` preenchido com os 9 mapeamentos reais** (5 cartões + 4 contas correntes) — ver seção abaixo.
-- **`python3 sync.py` testado de verdade e funcionando**: primeira rodada criou 29 transações reais no Firefly; segunda rodada confirmou deduplicação (0 criadas, 29 já existiam) — o `external_id` baseado no id da transação da Pluggy está funcionando como esperado.
-- Cron dentro do container: sincroniza a cada 3h, relatório diário às 7h (ver `Dockerfile`).
+| Quando | Mensagem |
+|---|---|
+| 05:00 todo dia | **Resumo** (pode gastar hoje, guardar, faturas, mês, sinais de preço) e **Gestor** (manchete, 2 a 4 observações, ação de hoje, aula do dia e uma pergunta) |
+| domingo 09:00 | Análise da semana |
+| quando precisa | Alerta se algum job falhar 2 vezes seguidas |
 
-### ⚠️ Pendente crítico: as correções de código abaixo só existem dentro do container rodando (hot-patch via Console do Portainer), **não estão no GitHub**. Se a stack for reconstruída (rebuild da imagem, reanexar ao Git e dar pull, etc.), o código volta pras versões antigas e quebra de novo. Precisa subir `pluggy_client.py`, `sync.py` e `account_mapping.json` atualizados pro GitHub assim que possível.
+Você atualiza respondendo o bot:
 
-## Mapeamento de contas (account_mapping.json) — completo
+| Comando | Para quê |
+|---|---|
+| `/fatura black 2450` | quanto você vai pagar de uma fatura (no Black, a sua parte); vale na hora, sem redeploy |
+| `/gasto 35,90 almoço #Alimentação` ou "gastei 35,90 no almoço" | gasto em dinheiro |
+| `/revisar` | classificar pendências com botões; "📌 Sempre" vira regra |
+| `/hoje`, `/gestor` | resumo e gestor na hora |
+| `/simular 1200 120 10` | à vista x parcelado com o CDI do dia |
+| `/metas`, `/parcelas`, `/pix`, `/mercado`, `/aula juros` | consultas e aulas |
+| qualquer pergunta | "quanto gastei com Pokémon este mês?" (IA com ferramentas, se a GPU estiver livre) |
 
-| Pluggy | Firefly | Tipo |
-|---|---|---|
-| Nubank platinum | Nubank (id 11) | cartão |
-| Mercado Pago cartão | Mercado Pago (id 13) | cartão |
-| Itaú Click Múltiplo MC Plat | Itaú Click (id 5) | cartão |
-| MASTER BLACK PRIME | Bradesco Black (id 7) | cartão |
-| CASAS BAHIA VISA PLATINUM | Bradesco Casas Bahia (id 6) | cartão |
-| Nu Pagamentos (conta) | Nubank Conta Corrente (id 29) | conta corrente |
-| Mercado Pago (conta) | Mercado Pago Conta Corrente (id 30) | conta corrente |
-| itau (conta) | Itau Conta Corrente (id 31) | conta corrente |
-| Banco Bradesco (conta) | Bradesco Conta Corrente (id 32) | conta corrente |
+## Subir do zero (Portainer, ~10 min)
 
-Excluídos de propósito:
-- MASTER BLACK PRIME duplicado (aparece em dois itens Pluggy, Bradesco e BradescoCard — é o mesmo cartão físico; só uma das duas contas é mapeada, pra não duplicar transações).
-- Poupança do Bradesco — Akira ainda precisa validar se é conta real ou de teste antes de entrar na sincronização.
+1. **Pré-requisitos**: Firefly III rodando no Umbrel, conta no [Meu Pluggy](https://meu.pluggy.ai)
+   com os bancos conectados, um bot do Telegram (@BotFather).
+2. **Portainer → Stacks → Add stack → Repository**
+   - URL: `https://github.com/VitorAkira-me/pluggy-firefly-sync`, branch `main`, compose `docker-compose.yml`.
+3. **Environment variables** (os nomes estão em [`.env.example`](.env.example)):
+   `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `FIREFLY_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+   Opcionais: `MONTHLY_SAVINGS_TARGET`, `SAFETY_BUFFER`, `LLM_BASE_URL`, `LLM_MODEL`.
+4. **Configurar contas.** Copie [`config/account_mapping.example.json`](config/account_mapping.example.json)
+   para `config/account_mapping.json`, preencha os IDs da sua instalação e mantenha esse arquivo
+   fora do GitHub. O arquivo real é ignorado pelo Git de propósito.
+5. **Deploy.** Em Containers → `personal-finance` → Logs deve aparecer a linha `scheduler: ...`.
+6. **Teste na hora** (Console do container):
+   ```sh
+   python -m app.sync --dry-run      # mostra o que entraria, sem gravar
+   python -m app.report --no-send    # imprime o resumo sem mandar
+   python -m app.insights --no-send  # imprime a análise semanal
+   ```
 
-As 4 contas correntes (Nubank, Mercado Pago, Itaú, Bradesco) foram criadas do zero no Firefly (ids 29–32) porque não existiam antes. A conta genérica antiga "Conta corrente" (id 15) ficou obsoleta — era um controle manual de caixa que a integração com a Pluggy substitui automaticamente — e não é mais usada.
+Atualizar depois: mudou algo no GitHub → **Stacks → personal-finance → Pull and redeploy**.
+Nunca edite arquivo dentro do container: some no próximo redeploy.
 
-## Três bugs reais encontrados e corrigidos durante o teste com dados reais
+## Ligar a IA local (opcional)
 
-1. **`GET /items` (listar todas as conexões) não existe na API da Pluggy** — por design, "Listing existing connections is not provided due to security reasons" (doc oficial). O código antigo tentava usar esse endpoint e sempre voltava 401. Corrigido trocando para `GET /items/{id}`, com o id de cada conexão copiado manualmente do Dashboard (dashboard.pluggy.ai → aplicação → Itens Conectados) uma vez só.
-2. **`GET /transactions` (paginação por página) foi descontinuado pela Pluggy** — retorna `410 Gone`. A doc oficial já marca esse endpoint como "List by Page (deprecated)". Corrigido trocando para `GET /v2/transactions` (paginação por cursor).
-3. **Sinal invertido nas transações de cartão de crédito.** Na Pluggy, conta corrente segue o padrão "negativo = despesa, positivo = receita" — mas cartão de crédito vem ao contrário: positivo é compra (aumenta a dívida), negativo é pagamento/estorno (reduz a dívida). O `sync.py` assumia o mesmo padrão pra tudo, então toda compra no cartão virava "deposit" (receita) no Firefly, e todo pagamento de fatura virava "withdrawal" (despesa) — exatamente invertido. Corrigido adicionando `"is_credit_card": true/false` em cada entrada do `account_mapping.json`; o `sync.py` inverte o sinal antes de decidir o tipo da transação quando a conta é cartão. As 21 transações que tinham sido criadas erradas nos 5 cartões foram apagadas e recriadas certas — confirmado manualmente (ex: compra na Terabyteshop no Nubank agora aparece como "withdrawal", como deveria).
+O Ollama do worker GPU do pokemon-radar já serve o `qwen2.5:7b-instruct`. Basta pôr no
+Portainer `LLM_BASE_URL` com o **mesmo valor do `LLM_LOCAL_URL` do pokemon-radar** (IP do
+KaviPC no Tailscale, porta 11434). A IA respeita a agenda da GPU do radar
+([`docs/ia-local.md`](docs/ia-local.md)). Sem isso tudo funciona, só com regras e ML.
 
-## Outras duas pegadinhas do deploy (Docker/Portainer, já corrigidas)
+## Primeira vez depois da consolidação
 
-1. **Sem `volumes:` no `docker-compose.yml`.** Montar `account_mapping.json`/`category_rules.json`/logs como volume quebra o container quando a stack é buildada via **Repository** (Git) — o Portainer não deixa os arquivos do repo soltos no host, só usa como contexto de build.
-2. **`umbrel.local` não resolve de dentro do container** (sem suporte a mDNS na imagem `python:3.11-slim`). Corrigido usando `FIREFLY_BASE_URL=http://127.0.0.1:30009`.
+```sh
+python scripts/fix_history.py           # mostra o que vai corrigir no histórico
+python scripts/fix_history.py --apply   # corrige: internas, parcelas e regras
+```
 
-## O que é seu, o que é meu
+## Ajustes do dia a dia
 
-**Sua parte:**
+| Quero... | Faço |
+|---|---|
+| Ver o que ficou sem categoria | `python scripts/list_uncategorized.py --days 30` |
+| Ensinar uma categoria | corrigir no Firefly (o histórico aprende) ou nova regra em `config/category_rules.json` |
+| Ligar conta/cartão novo | `python -m app.sync --list-accounts <item_id>` e adicionar em `config/account_mapping.json` |
+| Mudar horário | `REPORT_HOUR_UTC` no Portainer (Brasília = UTC-3) |
 
-1. Conta no Meu Pluggy com bancos/cartões conectados. ✅ Feito.
-2. `CLIENT_ID`/`CLIENT_SECRET` da Pluggy cadastrados no Portainer. ✅ Feito.
-3. Personal Access Token do Firefly cadastrado no Portainer. ✅ Feito.
-4. `account_mapping.json` preenchido com os ids reais. ✅ Feito.
-5. Validar se a poupança do Bradesco é conta real ou de teste (pra decidir se entra na sincronização). **Pendente.**
-6. Ajustar `category_rules.json` conforme forem aparecendo transações sem categoria reconhecida (a maioria das 29 transações reais importadas ainda não tem categoria — é normal, o dicionário de regras começa pequeno).
+## Estrutura
 
-**Minha parte (já entregue):**
+```
+app/        código (clients/, sync, classify, ml, report, price_signals, insights, scheduler)
+config/     regras editáveis (contas, categorias, limiares de preço)
+scripts/    utilitários (validar config, listar sem categoria)
+tests/      pytest sem rede
+docs/       arquitetura, IA local, operação, decisões (ADRs) e arquivo
+```
 
-- `pluggy_client.py`, `firefly_client.py`, `sync.py`, `daily_report.py`, `config.py`.
-- Descoberta e correção dos três bugs reais de API acima.
-- Mapeamento completo das 9 contas e criação das 4 contas correntes novas no Firefly.
-- Teste real de ponta a ponta: sincronização rodou, criou transações corretas, dedup confirmada.
-- **Pendente da minha parte**: subir o código corrigido pro GitHub (hoje só existe hot-patch no container).
+Desenvolvimento local:
 
-## Limitações conhecidas
+```sh
+uv sync
+uv run pytest -q
+uv run ruff check .
+```
 
-- **Categorização por palavra-chave** ainda vai errar bastante até o dicionário crescer.
-- **"Quanto posso gastar hoje"** ainda é uma aproximação (sem orçamentos por categoria no Firefly).
-- **Bradesco Black dividido com a Katarina**: o Open Finance traz o valor total da fatura; a divisão 50/50 continua sendo ajuste manual mensal.
-- **Sinais de preço/notícia** (inflação, combustível etc.) ficam de propósito fora deste script, num agendador separado do Claude.
-
-## Próximos passos
-
-1. Subir `pluggy_client.py`, `sync.py` e `account_mapping.json` atualizados pro GitHub (crítico — sem isso, um rebuild da stack reverte os três bugs corrigidos).
-2. Validar a poupança do Bradesco e decidir se entra no mapeamento.
-3. Confirmar que o relatório diário do Telegram continua chegando certinho com dados reais agora que há transações de verdade no Firefly.
-4. Ir ajustando `category_rules.json` com o tempo.
-5. Opcional: apagar os Personal Access Tokens órfãos do Firefly (`pluggy-sync-script`, `pluggy-sync-script-2`).
+O projeto usa `uv` para resolver e fixar dependências no `uv.lock`; não é necessário
+instalar `uv` dentro do ambiente virtual. Para atualizar dependências, use `uv lock --upgrade`
+e revise o diff do lockfile antes de sincronizar.
+Mais detalhes de operação e problemas conhecidos: [`docs/operacao.md`](docs/operacao.md).

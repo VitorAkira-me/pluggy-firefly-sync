@@ -1,0 +1,24 @@
+name: Validar configuração
+
+on:
+  push:
+    paths:
+      - config/**
+      - scripts/validate_config.py
+  pull_request:
+    paths:
+      - config/**
+      - scripts/validate_config.py
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/validate_config.py

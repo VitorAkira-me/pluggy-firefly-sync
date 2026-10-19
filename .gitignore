@@ -1,4 +1,14 @@
 .env
+env*.txt
+*.env
 logs/
+exports/
+*.zip
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+data/
+config/account_mapping.json
+_arquivo-sprint1/

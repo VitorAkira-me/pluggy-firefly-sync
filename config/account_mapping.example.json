@@ -1,0 +1,19 @@
+{
+  "_comment": "Copie este arquivo para account_mapping.json e substitua os placeholders pelos IDs da sua Pluggy e do seu Firefly III. Nunca publique o arquivo preenchido.",
+  "mappings": [
+    {
+      "pluggy_account_id": "PLUGGY_ACCOUNT_ID_1",
+      "pluggy_account_name": "Cartão de crédito (exemplo)",
+      "firefly_account_id": 1,
+      "firefly_account_name": "Cartão de crédito",
+      "is_credit_card": true
+    },
+    {
+      "pluggy_account_id": "PLUGGY_ACCOUNT_ID_2",
+      "pluggy_account_name": "Conta corrente (exemplo)",
+      "firefly_account_id": 2,
+      "firefly_account_name": "Conta corrente",
+      "is_credit_card": false
+    }
+  ]
+}

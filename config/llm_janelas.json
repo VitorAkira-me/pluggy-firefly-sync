@@ -1,0 +1,9 @@
+{
+  "_comment": "Quando o gestor financeiro pode usar a GPU do KaviPC (horário de Brasília). Espelha os períodos 'cheio' do config/gpu_agenda.yaml do pokemon-radar, os únicos em que o modelo de 4,7 GB cabe junto com a visão. Fora da janela, jobs em lote seguem sem IA; o bot só usa a IA se o modelo já estiver carregado (sem ocupar VRAM nova). Se mudar a agenda do radar, mude aqui também.",
+  "janelas": [
+    {"dias": ["seg", "ter", "qua", "qui", "sex", "sab", "dom"], "inicio": "00:00", "fim": "07:00"},
+    {"dias": ["ter", "qui", "sex"], "inicio": "07:00", "fim": "18:30"}
+  ],
+  "keep_alive_dentro": "5m",
+  "keep_alive_fora": "1m"
+}
