@@ -9,6 +9,7 @@ Cada job roda num subprocesso com timeout: se travar, o agendador e o bot seguem
 
 Horários (UTC; Brasília = UTC-3; configuráveis por variável):
 - app.sync      a cada SYNC_EVERY_HOURS (3)
+- app.health    07 e 19 UTC (04:00 e 16:00): conexões da Pluggy (aviso 1x por dia por problema)
 - app.review    REVIEW_HOUR_UTC (6 = 03:00), dentro da janela da GPU
 - app.report    REPORT_HOUR_UTC (8 = 05:00), números do dia
 - app.advisor   logo depois do report: gestor (análise + aula)
@@ -25,7 +26,7 @@ from app import state
 from app.config import load_settings
 
 JOB_TIMEOUT = 20 * 60
-ORDER = ["app.sync", "app.review", "app.report", "app.advisor", "app.insights"]
+ORDER = ["app.sync", "app.health", "app.review", "app.report", "app.advisor", "app.insights"]
 
 
 def run(module: str) -> int:
@@ -61,6 +62,7 @@ def alert(text: str) -> None:
 def due_jobs(now: datetime, s, last: dict) -> list[str]:
     keys = {
         "app.sync": (now.date(), now.hour) if now.hour % s.sync_every_hours == 0 else None,
+        "app.health": (now.date(), now.hour) if now.hour in (7, 19) else None,  # 04:00 e 16:00 BRT
         "app.review": now.date() if now.hour == getattr(s, "review_hour_utc", 6) else None,
         "app.report": now.date() if now.hour == s.report_hour_utc else None,
         "app.advisor": now.date() if now.hour == s.report_hour_utc else None,

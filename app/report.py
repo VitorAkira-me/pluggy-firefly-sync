@@ -11,7 +11,7 @@ import calendar
 import logging
 from datetime import date, timedelta
 
-from app import state
+from app import invoices
 from app.clients.firefly import FireflyClient, next_occurrence
 from app.clients.pluggy import PluggyClient
 from app.clients.telegram import send_message
@@ -53,29 +53,41 @@ def compute_safe_daily_spend(balance: float, events: list[dict], today: date, sa
     return max(0.0, best)
 
 
-def card_item(pluggy: PluggyClient, pid: str, target: dict, today: date, overrides: dict | None = None) -> dict:
-    """Valor e vencimento da próxima fatura de um cartão.
+def card_item(pluggy: PluggyClient, pid: str, target: dict, today: date, est: dict | None = None) -> dict:
+    """Próxima fatura de um cartão, do jeito mais automático possível (ver app/invoices.py).
 
-    Prioridade: valor informado pelo bot (/fatura, guardado no estado) > `manual_invoice` do
-    account_mapping.json > `balance` da Pluggy (que em alguns bancos inclui parcelas futuras)."""
-    manual = (overrides or {}).get(target["firefly_account_name"]) or target.get("manual_invoice")
-    if manual and not manual.get("day"):
-        manual = {**manual, "day": (target.get("manual_invoice") or {}).get("day") or 1}
-    if manual:
-        amount, due, updated = float(manual["amount"]), next_occurrence(int(manual["day"]), today), manual.get("updated_at")
+    `amount` é o que sai do SEU bolso (no cartão dividido, a sua parte); `total` é a fatura inteira."""
+    name = target["firefly_account_name"]
+    share = invoices.share_of(target)
+    override = invoices.valid_override(name, (est or {}).get("last_close"))
+    if override:
+        mine = float(override["amount"]) if override.get("minha_parte") or share == 1 else float(override["amount"]) * share
+        total = (est or {}).get("amount") if share != 1 else mine
+        day = override.get("day") or (target.get("manual_invoice") or {}).get("day")
+        due = (est or {}).get("due_date") or (next_occurrence(int(day), today).isoformat() if day else None)
+        source, updated = "bot", override.get("updated_at")
+    elif est:
+        mine, total, due, source, updated = est["my_amount"], est["amount"], est["due_date"], "calculada", None
     else:
-        acc = pluggy.get_account(pid)
-        amount = float(acc.get("balance") or 0)
-        raw_due = (acc.get("creditData") or {}).get("balanceDueDate")
-        due = next_occurrence(date.fromisoformat(raw_due[:10]).day, today) if raw_due else None
-        updated = None
+        legacy = target.get("manual_invoice")
+        if legacy:
+            total, due = float(legacy["amount"]), next_occurrence(int(legacy["day"]), today).isoformat()
+            source, updated = "mapeamento", legacy.get("updated_at")
+        else:
+            acc = pluggy.get_account(pid)
+            total = float(acc.get("balance") or 0)
+            raw_due = (acc.get("creditData") or {}).get("balanceDueDate")
+            due = next_occurrence(date.fromisoformat(raw_due[:10]).day, today).isoformat() if raw_due else None
+            source, updated = "pluggy", None
+        mine = total * share
     return {
-        "name": target["firefly_account_name"],
-        "amount": round(amount, 2),
-        "due_date": due.isoformat() if due else None,
-        "shared": bool(target.get("shared")) or target["firefly_account_name"] == "Bradesco Black",
-        "manual": bool(manual),
-        "my_share": bool(manual and manual.get("minha_parte")),
+        "name": name,
+        "amount": round(mine, 2),
+        "total": round(total, 2) if total is not None else None,
+        "due_date": due,
+        "shared": share != 1,
+        "source": source,
+        "manual": source in ("bot", "mapeamento"),
         "updated_at": updated,
     }
 
@@ -102,8 +114,8 @@ def compute_report(pluggy: PluggyClient, firefly: FireflyClient, mapping: dict, 
         key=lambda i: i["day"],
     )
 
-    overrides = state.manual_invoices()
-    card_items = sorted((card_item(pluggy, pid, m, today, overrides) for pid, m in cards),
+    estimates = invoices.estimates_cached(pluggy, mapping, today)
+    card_items = sorted((card_item(pluggy, pid, m, today, estimates.get(m["firefly_account_name"])) for pid, m in cards),
                         key=lambda i: i["due_date"] or "9999-12-31")
     card_events = [{"date": c["due_date"], "amount": c["amount"], "direction": "expense"}
                    for c in card_items if c["due_date"] and c["amount"] > 0]
@@ -154,19 +166,15 @@ def format_report_text(r: dict) -> str:
         lines += ["", f"📅 *Contas a vencer este mês*: {fmt_brl(r['fixed_bills_due'])}"]
         lines += [f"• {i['title']}: {fmt_brl(i['amount'])} (dia {i['day']:02d})" for i in r["fixed_bills_items"]]
     if r["card_items"]:
-        lines += ["", f"💳 *Faturas*: {fmt_brl(r['cards_due_total'])}"]
+        lines += ["", f"💳 *Faturas (o que sai do seu bolso)*: {fmt_brl(r['cards_due_total'])}"]
+        label = {"calculada": "calculada", "bot": "informada por você", "mapeamento": "valor antigo do mapeamento",
+                 "pluggy": "saldo da Pluggy, pode incluir parcelas futuras"}
         for c in r["card_items"]:
             due = date.fromisoformat(c["due_date"]).strftime("%d/%m") if c["due_date"] else "?"
-            notes = []
-            if c.get("my_share"):
-                notes.append("sua parte")
-            elif c["shared"]:
-                notes.append("conjunta, sua parte é metade")
-            if c["manual"]:
-                upd = date.fromisoformat(c["updated_at"]) if c.get("updated_at") else None
-                old = upd and (date.fromisoformat(r["date"]) - upd).days > 10
-                notes.append(f"informado em {upd.strftime('%d/%m') if upd else '?'}" + (" ⚠️ atualize: /fatura" if old else ""))
-            lines.append(f"• {c['name']}: {fmt_brl(c['amount'])} (vence {due})" + (f" ({'; '.join(notes)})" if notes else ""))
+            extra = [label.get(c.get("source"), "")]
+            if c.get("shared") and c.get("total"):
+                extra.insert(0, f"sua parte de {fmt_brl(c['total'])}")
+            lines.append(f"• {c['name']}: {fmt_brl(c['amount'])} (vence {due}; {'; '.join(x for x in extra if x)})")
     if r["top_categories"]:
         lines += ["", "🏷 *Onde foi o dinheiro no mês:*"]
         lines += [f"{n}. {c['name']}: {fmt_brl(c['amount'])} ({c['pct']:.0f}%)" for n, c in enumerate(r["top_categories"], 1)]

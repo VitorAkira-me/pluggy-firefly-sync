@@ -1,6 +1,6 @@
 ---
 titulo: Negócio e vida pessoal: caixas separados
-gatilhos: [pokemon]
+gatilhos: [negocio]
 ---
 Ideia central: quando um hobby vira revenda, cada compra deixa de ser só consumo e passa a ser estoque, que é dinheiro parado com risco. Misturar o caixa do negócio com o pessoal esconde as duas coisas: você não sabe se o negócio dá lucro nem quanto sobra para a vida.
 

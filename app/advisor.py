@@ -31,7 +31,6 @@ from app.finmath import annual_to_monthly
 from app.report import compute_report, fmt_brl
 
 log = logging.getLogger("advisor")
-STALE_INVOICE_DAYS = 10
 
 SCHEMA = {
     "type": "object",
@@ -52,6 +51,8 @@ SYSTEM = (
     "Regras: português do Brasil, tom natural e direto, sem travessão, sem jargão sem explicar. "
     "Use SOMENTE números que aparecem nos FATOS ou no texto da AULA; nunca calcule nada novo. "
     "Não recomende produto financeiro específico nem diga para comprar ou vender ativo. "
+    "Pokémon TCG é CONSUMO (hobby, gasto de desejo), não investimento nem negócio: trate o teto mensal do "
+    "orçamento como limite de lazer e nunca justifique compra por possível revenda. "
     "Se algo do que você sugeriu nos últimos dias (campo historico) continua pendente, cobre com gentileza. "
     "manchete: 1 frase. observacoes: 2 a 4 frases curtas, cada uma com um fato e o que ele significa. "
     "acao_do_dia: 1 ação que dá para fazer hoje em até 10 minutos. aula: 3 a 5 frases adaptando a AULA aos fatos. "
@@ -79,8 +80,8 @@ def gather(today: date | None = None) -> dict:
 
 def build_facts(splits, report, mk, budgets, piggies, monthly_saving, rate_am, today) -> dict:
     invoices = state.manual_invoices()
-    stale = [c["name"] for c in report.get("card_items", []) if c.get("manual") and c.get("updated_at")
-             and (today - date.fromisoformat(c["updated_at"])).days > STALE_INVOICE_DAYS]
+    # só sobra trabalho manual quando a fatura não pôde ser calculada (sem faturas fechadas na Pluggy)
+    stale = [c["name"] for c in report.get("card_items", []) if c.get("source") in ("pluggy", "mapeamento")]
     due_soon = [c for c in report.get("card_items", []) if c.get("due_date")
                 and 0 <= (date.fromisoformat(c["due_date"]) - today).days <= 5]
     review = sum(1 for x in splits if "revisar" in (x.get("tags") or []))
@@ -115,7 +116,7 @@ def triggers(f: dict) -> set[str]:
     if not f.get("pode_gastar_hoje"):
         t.add("saldo_baixo")
     p = f["pokemon"]
-    if p.get("uso_orcamento_pct") and p["uso_orcamento_pct"] > 100:
+    if p.get("uso_orcamento_pct") and p["uso_orcamento_pct"] > 80:
         t |= {"pokemon", "impulso"}
     if f["faturas_vencendo_5_dias"]:
         t |= {"fatura", "cartao"}
@@ -178,7 +179,8 @@ def rule_based(f: dict, lesson: lessons.Lesson) -> dict:
         y, m = prox["mes"].split("-")
         obs.append(f"Já há {fmt_brl(prox['total'])} em parcelas para {m}/{y}.")
     if f["faturas_desatualizadas"]:
-        acao = f"Atualize o valor da fatura de {', '.join(f['faturas_desatualizadas'])} com /fatura."
+        acao = (f"Não consegui calcular a fatura de {', '.join(f['faturas_desatualizadas'])}; se souber o valor, "
+                "mande /fatura (vale só até ela fechar).")
     elif f["a_revisar"]:
         acao = f"Revise {f['a_revisar']} transações pendentes com /revisar (2 minutos)."
     else:

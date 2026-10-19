@@ -41,6 +41,7 @@ class Settings:
     firefly_token: str
     telegram_bot_token: str
     telegram_chat_id: str
+    telegram_user_id: str
     monthly_savings_target: float
     safety_buffer: float
     report_hour_utc: int
@@ -62,10 +63,12 @@ def load_settings() -> Settings:
     return Settings(
         pluggy_client_id=os.environ.get("PLUGGY_CLIENT_ID", ""),
         pluggy_client_secret=os.environ.get("PLUGGY_CLIENT_SECRET", ""),
-        firefly_base_url=os.environ.get("FIREFLY_BASE_URL", "http://umbrel.local:30009").rstrip("/"),
+        firefly_base_url=os.environ.get("FIREFLY_BASE_URL", "http://127.0.0.1:30009").rstrip("/"),
         firefly_token=os.environ.get("FIREFLY_TOKEN", ""),
         telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
         telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", ""),
+        # quem pode mandar comandos; num chat privado o id do usuário é igual ao do chat
+        telegram_user_id=os.environ.get("TELEGRAM_USER_ID", "") or os.environ.get("TELEGRAM_CHAT_ID", ""),
         monthly_savings_target=_float("MONTHLY_SAVINGS_TARGET", 0.0),
         safety_buffer=_float("SAFETY_BUFFER", 0.0),
         report_hour_utc=_int("REPORT_HOUR_UTC", 8),  # 05:00 em Brasília
@@ -86,10 +89,27 @@ def _read_json(name: str) -> dict:
         return json.load(fh)
 
 
+def account_mapping_source() -> tuple[str, dict]:
+    """De onde vem o mapeamento de contas (ele NÃO fica no GitHub, por ter ids financeiros).
+
+    Ordem: variável ACCOUNT_MAPPING_JSON (JSON numa linha, cadastrada no Portainer como os
+    outros segredos) > /data/account_mapping.json (volume) > config/account_mapping.json (local)."""
+    raw = os.environ.get("ACCOUNT_MAPPING_JSON", "").strip()
+    if raw:
+        return "env ACCOUNT_MAPPING_JSON", json.loads(raw)
+    data_file = Path(os.environ.get("PF_DATA_DIR") or "/data") / "account_mapping.json"
+    for path in (data_file, CONFIG_DIR / "account_mapping.json"):
+        if path.is_file():
+            return str(path), json.loads(path.read_text(encoding="utf-8"))
+    raise FileNotFoundError(
+        "account_mapping.json não encontrado: defina ACCOUNT_MAPPING_JSON no Portainer ou grave /data/account_mapping.json"
+    )
+
+
 @lru_cache(maxsize=1)
 def load_account_mapping() -> dict[str, dict]:
     """{pluggy_account_id: entrada do mapeamento}."""
-    data = _read_json("account_mapping.json")
+    _, data = account_mapping_source()
     return {m["pluggy_account_id"]: m for m in data["mappings"]}
 
 

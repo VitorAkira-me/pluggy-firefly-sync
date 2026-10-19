@@ -5,8 +5,8 @@
 | Quando | O quê | Onde |
 |---|---|---|
 | Diário 05:00 | Ler resumo e gestor; responder a pergunta se quiser | Telegram |
-| Quando chegar fatura | `/fatura <cartão> <valor>` (Black: a sua parte) | Telegram |
-| Semanal | `/revisar` (2 minutos) | Telegram |
+| Quando o bot avisar | Reconectar banco no Meu Pluggy (login ou consentimento vencendo) | Meu Pluggy |
+| Quando quiser | `/revisar` (o que a IA não teve certeza); `/fatura` só se o valor calculado estiver errado | Telegram |
 | Ao mudar código | PR no GitHub, merge, Pull and redeploy | GitHub + Portainer |
 
 ## Deploy e atualização
@@ -38,7 +38,9 @@ dinheiro nem transação; perde só essas anotações.
 
 1. **Sem atualização sob demanda** no Meu Pluggy: uma compra pode levar horas (já medido ~23h)
    até aparecer.
-2. **Fatura aberta não existe na API**: `/bills` só traz faturas fechadas.
+2. **Fatura aberta não existe na API**: `/bills` só traz faturas fechadas. Por isso
+   `app/invoices.py` calcula: compras com data efetiva entre o último fechamento e o próximo,
+   menos estornos, sem pagamentos. Atualização da Pluggy: automática, 1x por dia.
 3. **`balance` de cartão muda de significado por banco.** Teste: se
    `balance == creditLimit - availableCreditLimit`, o banco está mandando o limite comprometido
    (inclui parcelas futuras). Em set/2026: Bradesco Black, Mercado Pago e Itaú Click incluem;
@@ -63,8 +65,15 @@ dinheiro nem transação; perde só essas anotações.
 | Sistema parado de 24/09 a 19/10/2026 sem aviso | container voltou ao cron; scheduler tinha sido iniciado à mão | `app.main` como CMD + alerta de job com 2 falhas |
 | Gasto do mês quase dobrado | fatura paga, Pix no crédito e PIX próprio contados como gasto; parcelas futuras no mês da compra | `app/normalize.py` + `scripts/fix_history.py` |
 
+## Mapeamento de contas (fora do Git)
+
+O `account_mapping.json` real tem ids financeiros e não vai para o GitHub. No Portainer,
+cadastre a variável `ACCOUNT_MAPPING_JSON` com o conteúdo do arquivo numa linha só
+(no PC: `python -c "import json;print(json.dumps(json.load(open('config/account_mapping.json',encoding='utf-8'))))"`).
+Alternativa: gravar o arquivo em `/data/account_mapping.json` pelo Console do container.
+
 ## Segurança
 
-- Token do Firefly ativo: `pluggy-sync-script-3` (os órfãos foram apagados em set/2026).
+- Use um token dedicado do Firefly para este serviço e mantenha-o somente no Portainer.
 - Repositório público: nunca commitar `.env`, `env*.txt`, exports ou zips (o `.gitignore` cobre).
 - Firefly, Portainer e Ollama só na rede local ou Tailscale.

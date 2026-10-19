@@ -12,7 +12,7 @@ Texto livre: "gastei 40 no ifood" vira um lançamento para confirmar; perguntas 
 gastei com Pokémon este mês?") vão para o gestor (LLM local com ferramentas), se a GPU
 estiver liberada.
 
-Segurança: só responde ao TELEGRAM_CHAT_ID configurado; qualquer outro chat é ignorado.
+Segurança: só responde ao chat privado e ao usuário configurados; qualquer outro update é ignorado.
 Cada mensagem é tratada numa thread separada (pool de 2), então uma resposta lenta da IA
 não trava os botões nem o agendador.
 """
@@ -118,7 +118,8 @@ class Bot:
                                                  for m in load_account_mapping().values())
         entry = state.set_manual_invoice(card, value, day, my_share=shared)
         extra = " (a sua parte)" if shared else ""
-        self.say(f"✅ {card}: R$ {entry['amount']:.2f}{extra} anotado. Entra no \"pode gastar\" a partir de agora.")
+        self.say(f"✅ {card}: R$ {entry['amount']:.2f}{extra} anotado. Vale até essa fatura fechar; depois o sistema "
+                 "volta a calcular sozinho pela Pluggy.")
 
     def cmd_gasto(self, args: str) -> None:
         m = re.match(r"([\d.,]+)\s+(.+)", args.strip())
@@ -366,16 +367,25 @@ class Bot:
         self.show_review(i + 1, queue, msg_id)
 
     # -- laço
+    def authorized(self, chat: dict, sender: dict) -> bool:
+        """Só o dono, só em conversa privada. Grupo nunca: lá qualquer membro mandaria comandos."""
+        return (chat.get("type") == "private"
+                and str(chat.get("id")) == str(self.s.telegram_chat_id)
+                and str(sender.get("id")) == str(self.s.telegram_user_id))
+
     def dispatch(self, update: dict) -> None:
         try:
             if "callback_query" in update:
                 cb = update["callback_query"]
-                if str((cb.get("message") or {}).get("chat", {}).get("id")) == str(self.s.telegram_chat_id):
+                if self.authorized((cb.get("message") or {}).get("chat") or {}, cb.get("from") or {}):
                     self.on_callback(cb)
+                else:
+                    tg.answer_callback(self.s.telegram_bot_token, cb["id"], "Não autorizado")
                 return
             msg = update.get("message") or {}
-            if str(msg.get("chat", {}).get("id")) != str(self.s.telegram_chat_id):
-                return  # só o dono conversa com o bot
+            if not self.authorized(msg.get("chat") or {}, msg.get("from") or {}):
+                log.warning("mensagem ignorada de chat/usuário não autorizado")
+                return
             text = (msg.get("text") or "").strip()
             if not text:
                 return

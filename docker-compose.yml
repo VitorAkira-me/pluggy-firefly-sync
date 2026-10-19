@@ -6,7 +6,9 @@ services:
     pull_policy: build          # reconstrói a imagem a cada redeploy (senão usa a antiga em cache)
     container_name: personal-finance
     restart: unless-stopped
-    network_mode: host          # alcança o Firefly em 127.0.0.1:30009 e o KaviPC na rede de casa
+    # host: alcança o Firefly em 127.0.0.1:30009 e o Ollama pelo Tailscale do Umbrel. O container não abre
+    # nenhuma porta (bot usa long polling, só conexões de saída). Ver docs/decisions/0007.
+    network_mode: host
     # Valores vêm de Stacks -> Environment variables no Portainer. Nunca do Git.
     environment:
       PLUGGY_CLIENT_ID: ${PLUGGY_CLIENT_ID}
@@ -15,6 +17,9 @@ services:
       FIREFLY_TOKEN: ${FIREFLY_TOKEN}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      TELEGRAM_USER_ID: ${TELEGRAM_USER_ID:-}
+      # Mapeamento de contas (tem ids financeiros, por isso fica fora do Git): JSON numa linha só
+      ACCOUNT_MAPPING_JSON: ${ACCOUNT_MAPPING_JSON:-}
       MONTHLY_SAVINGS_TARGET: ${MONTHLY_SAVINGS_TARGET:-0}
       SAFETY_BUFFER: ${SAFETY_BUFFER:-0}
       REPORT_HOUR_UTC: ${REPORT_HOUR_UTC:-8}

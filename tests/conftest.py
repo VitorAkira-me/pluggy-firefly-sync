@@ -30,7 +30,7 @@ def fake_config(tmp_path, monkeypatch):
     monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
     for fn in (cfg.load_account_mapping, cfg.load_category_rules, cfg.load_category_rules_file, cfg.load_price_signals_config, cfg.load_llm_windows):
         fn.cache_clear()
-    for var in ("LLM_BASE_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for var in ("LLM_BASE_URL", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_USER_ID", "ACCOUNT_MAPPING_JSON"):
         monkeypatch.delenv(var, raising=False)
     yield tmp_path
     for fn in (cfg.load_account_mapping, cfg.load_category_rules, cfg.load_category_rules_file, cfg.load_price_signals_config, cfg.load_llm_windows):

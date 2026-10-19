@@ -69,9 +69,16 @@ em `docs/arquivo/`.
 11. **IA nunca é a primeira opção** de classificação; confiança < 0,80 só sugere (tag `revisar`).
 12. **Descrição de banco é dado não confiável** (prompt injection): vai delimitada; categoria
     fora da lista permitida é descartada.
-13. **Bot só responde ao `TELEGRAM_CHAT_ID`.** Nenhuma ação financeira real (pagamento,
-    transferência) é feita pelo sistema; só registros no Firefly e no estado.
+13. **Bot só responde ao dono em chat privado** (`chat.type == private`, `chat.id ==
+    TELEGRAM_CHAT_ID` e `from.id == TELEGRAM_USER_ID`, também nos botões). Nenhuma ação
+    financeira real (pagamento, transferência) é feita pelo sistema; só registros.
 14. **Sem recomendação de produto financeiro específico** pelo gestor; ele ensina e organiza.
+15. **Mapeamento de contas fora do Git** (tem ids financeiros): vem de `ACCOUNT_MAPPING_JSON`
+    (Portainer) ou `/data/account_mapping.json`. No repositório só o `.example`.
+16. **Zero manutenção manual como padrão.** Fatura aberta é calculada pela Pluggy
+    (`app/invoices.py`); o `/fatura` é correção opcional que expira quando a fatura fecha.
+    Pokémon TCG é **consumo** (desejo, com teto no orçamento), nunca "investimento".
+17. **O gestor roda na IA local.** Claude (CLI ou chat) é só para desenvolvimento e ajustes.
 
 ---
 
@@ -85,6 +92,7 @@ manhã (05:00)    report: pode gastar hoje (30 dias), faturas, mês, sinais de p
 domingo (09:00)  insights: semana x média, fora do padrão, assinaturas prováveis
 bot (sempre)     /hoje /gestor /fatura /gasto /revisar /simular /metas /parcelas /pix /mercado /aula
                  texto livre: "gastei 40 no ifood" -> confirmar; perguntas -> LLM com ferramentas
+saúde (04h/16h)  conexões da Pluggy: login, atraso > 36 h, auto-sync desligado, consentimento perto de vencer
 falha 2x seguidas de um job -> alerta no Telegram
 ```
 
@@ -120,6 +128,8 @@ app/
   sync.py         Pluggy -> Firefly
   review.py       passada da madrugada e fila de revisão
   report.py       resumo diário e "pode gastar hoje"
+  invoices.py     fatura aberta calculada (faturas fechadas + compras do ciclo + parcelas)
+  health.py       saúde das conexões da Pluggy
   price_signals.py câmbio, IPCA/Selic, combustível
   facts.py        fatos determinísticos (mês, parcelas, Pix no crédito, Pokémon, metas)
   finmath.py      juros, taxas equivalentes, VP, custo efetivo, metas
@@ -144,6 +154,8 @@ docs/             arquitetura, ia-local, operacao, decisions/, arquivo/
 | `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET` | sim | |
 | `FIREFLY_BASE_URL`, `FIREFLY_TOKEN` | sim | `http://127.0.0.1:30009` |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | sim | |
+| `TELEGRAM_USER_ID` | não | igual ao chat id num chat privado |
+| `ACCOUNT_MAPPING_JSON` | sim* | JSON do mapeamento numa linha (*ou `/data/account_mapping.json`) |
 | `MONTHLY_SAVINGS_TARGET`, `SAFETY_BUFFER` | não | `175.89`, `0` |
 | `REPORT_HOUR_UTC`, `REVIEW_HOUR_UTC`, `SYNC_EVERY_HOURS` | não | `8`, `6`, `3` |
 | `INSIGHTS_WEEKDAY_UTC`, `INSIGHTS_HOUR_UTC` | não | `6` (domingo), `12` |
@@ -184,8 +196,9 @@ explícita do Akira.** Nunca versionar `.env`, `env*.txt`, exports, zips.
 | Fase | Entrega | Status |
 |---|---|---|
 | 1-2 | Sync, relatório, faturas, 30 dias, sinais de preço | feito (set/2026) |
-| 3 | Consolidação, scheduler único, dedupe em lote, internas e parcelas | branch `consolidacao` |
-| 4 | Gestor com IA local, bot de mão dupla, revisão com botões, aulas | branch `consolidacao` |
+| 3 | Consolidação, scheduler único, dedupe em lote, internas e parcelas | feito (main b69d5e7) |
+| 4 | Gestor com IA local, bot de mão dupla, revisão com botões, aulas | feito (main b69d5e7) |
+| 4.1 | Fatura automática, Black 50%, saúde da Pluggy, bot só privado, mapeamento fora do Git | branch `automacao` |
 | 5 | Orçamentos por categoria no Firefly, metas com prazo, fechamento mensal | próxima |
 | 6 | Comparar modelos com as correções como conjunto de teste; alertas em tempo real | ideia |
 
