@@ -14,7 +14,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from app import state
-from app.clients.pluggy import PluggyClient
+from app.clients.pluggy import PluggyAuthError, PluggyClient
 from app.clients.telegram import send_message
 from app.config import load_account_mapping, load_settings
 
@@ -52,24 +52,31 @@ def check_item(item: dict, now: datetime) -> list[str]:
     return problems
 
 
-def item_ids(pluggy: PluggyClient, mapping: dict) -> set[str]:
-    ids = set()
+def item_ids(pluggy: PluggyClient, mapping: dict) -> tuple[set[str], list[str]]:
+    """Ids das conexões e problemas de acesso (credencial recusada ou contas que não respondem)."""
+    ids, failed = set(), 0
     for pid in mapping:
         try:
             item_id = pluggy.get_account(pid).get("itemId")
             if item_id:
                 ids.add(item_id)
+        except PluggyAuthError as exc:
+            return set(), [str(exc)]  # sem credencial nada funciona: um aviso só
         except Exception as exc:  # noqa: BLE001
-            log.warning("conta %s sem resposta da Pluggy: %s", pid[:8], exc)
-    return ids
+            failed += 1
+            log.warning("conta %s sem resposta da Pluggy: %s", pid[:8], type(exc).__name__)
+    if failed == len(mapping) and failed:
+        return ids, ["Nenhuma conta do mapeamento existe mais na Pluggy (ids trocados: banco reconectado ou app "
+                     "recriado). Rode scripts/remap_accounts.py com os ids dos itens e atualize ACCOUNT_MAPPING_JSON."]
+    return ids, ([f"{failed} conta(s) do mapeamento não responderam na Pluggy."] if failed else [])
 
 
 def run(send: bool = True) -> list[str]:
     s = load_settings()
     pluggy = PluggyClient(s.pluggy_client_id, s.pluggy_client_secret)
     now = datetime.now(UTC)
-    problems: list[str] = []
-    for iid in sorted(item_ids(pluggy, load_account_mapping())):
+    ids, problems = item_ids(pluggy, load_account_mapping())
+    for iid in sorted(ids):
         try:
             problems += check_item(pluggy.get_item(iid), now)
         except Exception as exc:  # noqa: BLE001

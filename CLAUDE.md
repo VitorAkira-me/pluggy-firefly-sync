@@ -140,7 +140,7 @@ app/
   insights.py     análise semanal
   bot.py          bot de mão dupla
 config/           account_mapping, category_rules (+internal, +categories), price_signals, llm_janelas
-scripts/          validate_config, list_uncategorized, fix_history
+scripts/          validate_config, list_uncategorized, fix_history, remap_accounts (ids novos da Pluggy)
 tests/            pytest sem rede
 docs/             arquitetura, ia-local, operacao, decisions/, arquivo/
 ```

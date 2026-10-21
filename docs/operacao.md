@@ -72,6 +72,19 @@ cadastre a variável `ACCOUNT_MAPPING_JSON` com o conteúdo do arquivo numa linh
 (no PC: `python -c "import json;print(json.dumps(json.load(open('config/account_mapping.json',encoding='utf-8'))))"`).
 Alternativa: gravar o arquivo em `/data/account_mapping.json` pelo Console do container.
 
+## Pluggy trocou os ids (404 em todas as contas)
+
+Acontece quando o banco é reconectado ou a aplicação da Pluggy é recriada/reativada: os ids de
+conta mudam, os do Firefly não. Pegue os ids dos itens (dashboard.pluggy.ai > aplicação >
+Itens conectados) e rode no Console:
+
+```sh
+/app/.venv/bin/python scripts/remap_accounts.py <item_id> [<item_id> ...]
+```
+
+Ele casa as contas novas com as antigas pelo nome e imprime o JSON novo para colar em
+`ACCOUNT_MAPPING_JSON`. Depois: Pull and redeploy.
+
 ## Segurança
 
 - Use um token dedicado do Firefly para este serviço e mantenha-o somente no Portainer.

@@ -16,6 +16,10 @@ import requests
 API_BASE = "https://api.pluggy.ai"
 
 
+class PluggyAuthError(RuntimeError):
+    """A Pluggy recusou PLUGGY_CLIENT_ID/PLUGGY_CLIENT_SECRET (a mensagem nunca traz os valores)."""
+
+
 class PluggyClient:
     def __init__(self, client_id: str, client_secret: str, session: requests.Session | None = None):
         self.client_id = client_id
@@ -30,6 +34,11 @@ class PluggyClient:
                 json={"clientId": self.client_id, "clientSecret": self.client_secret},
                 timeout=30,
             )
+            if resp.status_code in (400, 401, 403):
+                raise PluggyAuthError(
+                    f"Pluggy recusou as credenciais (HTTP {resp.status_code}). Confira PLUGGY_CLIENT_ID e "
+                    "PLUGGY_CLIENT_SECRET no Portainer (dashboard.pluggy.ai > aplicação > credenciais)."
+                )
             resp.raise_for_status()
             self._api_key = resp.json()["apiKey"]
         return self._api_key

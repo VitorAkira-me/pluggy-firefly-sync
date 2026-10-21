@@ -83,3 +83,41 @@ def test_bot_so_responde_ao_dono_em_chat_privado(monkeypatch):
     assert not bot.authorized({"id": 111, "type": "group"}, {"id": 111})        # grupo nunca
     assert not bot.authorized({"id": 111, "type": "private"}, {"id": 222})      # outro usuário
     assert not bot.authorized({"id": 999, "type": "private"}, {"id": 999})      # outro chat
+
+
+def test_variaveis_com_espaco_e_umbrel_local(monkeypatch):
+    from app.config import load_settings
+    monkeypatch.setenv("PLUGGY_CLIENT_ID", "  abc \n")
+    monkeypatch.setenv("FIREFLY_BASE_URL", "http://umbrel.local:30009/")
+    s = load_settings()
+    assert s.pluggy_client_id == "abc" and s.firefly_base_url == "http://127.0.0.1:30009"
+
+
+def test_saude_avisa_credencial_recusada():
+    from app.clients.pluggy import PluggyAuthError
+    from app.health import item_ids
+
+    class Recusa:
+        def get_account(self, pid):
+            raise PluggyAuthError("Pluggy recusou as credenciais (HTTP 401).")
+
+    ids, problems = item_ids(Recusa(), {"a": {}, "b": {}})
+    assert ids == set() and problems == ["Pluggy recusou as credenciais (HTTP 401)."]
+
+
+def test_remap_casa_por_nome_e_tipo():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("remap", "scripts/remap_accounts.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    old = {"mappings": [
+        {"pluggy_account_id": "velho-1", "pluggy_account_name": "Itaú Click Múltiplo MC Plat", "firefly_account_id": 5,
+         "firefly_account_name": "Itaú Click", "is_credit_card": True},
+        {"pluggy_account_id": "velho-2", "pluggy_account_name": "itau", "firefly_account_id": 31,
+         "firefly_account_name": "Itau Conta Corrente", "is_credit_card": False},
+    ]}
+    accounts = [{"id": "novo-1", "name": "Itau Click Multiplo MC Plat", "type": "CREDIT"},
+                {"id": "novo-3", "name": "Poupança", "type": "BANK"}]
+    new, missing, extra = mod.remap(old, accounts)
+    assert new["mappings"][0]["pluggy_account_id"] == "novo-1" and new["mappings"][0]["firefly_account_id"] == 5
+    assert missing == ["Itau Conta Corrente"] and extra and "Poupança" in extra[0]

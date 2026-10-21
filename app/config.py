@@ -23,6 +23,11 @@ except ImportError:  # pragma: no cover
     pass
 
 
+def _env(name: str, default: str = "") -> str:
+    """Valor da variável sem espaços nem quebras de linha nas pontas (erro comum ao colar no Portainer)."""
+    return os.environ.get(name, default).strip()
+
+
 def _float(name: str, default: float) -> float:
     raw = os.environ.get(name, "")
     return float(raw) if raw.strip() else default
@@ -31,6 +36,12 @@ def _float(name: str, default: float) -> float:
 def _int(name: str, default: int) -> int:
     raw = os.environ.get(name, "")
     return int(raw) if raw.strip() else default
+
+
+def _firefly_url() -> str:
+    """umbrel.local não resolve dentro do container (sem mDNS); troca por 127.0.0.1 (rede host)."""
+    url = _env("FIREFLY_BASE_URL", "http://127.0.0.1:30009").rstrip("/")
+    return url.replace("://umbrel.local", "://127.0.0.1")
 
 
 @dataclass(frozen=True)
@@ -61,14 +72,14 @@ class Settings:
 
 def load_settings() -> Settings:
     return Settings(
-        pluggy_client_id=os.environ.get("PLUGGY_CLIENT_ID", ""),
-        pluggy_client_secret=os.environ.get("PLUGGY_CLIENT_SECRET", ""),
-        firefly_base_url=os.environ.get("FIREFLY_BASE_URL", "http://127.0.0.1:30009").rstrip("/"),
-        firefly_token=os.environ.get("FIREFLY_TOKEN", ""),
-        telegram_bot_token=os.environ.get("TELEGRAM_BOT_TOKEN", ""),
-        telegram_chat_id=os.environ.get("TELEGRAM_CHAT_ID", ""),
+        pluggy_client_id=_env("PLUGGY_CLIENT_ID"),
+        pluggy_client_secret=_env("PLUGGY_CLIENT_SECRET"),
+        firefly_base_url=_firefly_url(),
+        firefly_token=_env("FIREFLY_TOKEN"),
+        telegram_bot_token=_env("TELEGRAM_BOT_TOKEN"),
+        telegram_chat_id=_env("TELEGRAM_CHAT_ID") or _env("TELEGRAM_USER_ID"),  # chat privado: mesmo número
         # quem pode mandar comandos; num chat privado o id do usuário é igual ao do chat
-        telegram_user_id=os.environ.get("TELEGRAM_USER_ID", "") or os.environ.get("TELEGRAM_CHAT_ID", ""),
+        telegram_user_id=_env("TELEGRAM_USER_ID") or _env("TELEGRAM_CHAT_ID"),
         monthly_savings_target=_float("MONTHLY_SAVINGS_TARGET", 0.0),
         safety_buffer=_float("SAFETY_BUFFER", 0.0),
         report_hour_utc=_int("REPORT_HOUR_UTC", 8),  # 05:00 em Brasília
@@ -77,7 +88,7 @@ def load_settings() -> Settings:
         insights_hour_utc=_int("INSIGHTS_HOUR_UTC", 12),  # 09:00 em Brasília
         sync_every_hours=_int("SYNC_EVERY_HOURS", 3),
         sync_since_days=_int("SYNC_SINCE_DAYS", 7),
-        llm_base_url=os.environ.get("LLM_BASE_URL", "").rstrip("/"),
+        llm_base_url=_env("LLM_BASE_URL").rstrip("/"),
         llm_model=os.environ.get("LLM_MODEL", "qwen2.5:7b-instruct"),
         llm_timeout=_int("LLM_TIMEOUT", 120),
     )
