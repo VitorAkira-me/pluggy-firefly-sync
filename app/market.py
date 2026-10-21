@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import requests
 
@@ -25,15 +25,30 @@ from app import state
 from app.finmath import real_rate
 
 log = logging.getLogger(__name__)
-URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados/ultimos/{n}?formato=json"
-SERIES = {"selic": (432, 400), "cdi": (4389, 30), "ipca_mes": (433, 24), "ipca_12m": (13522, 24)}
+BASE = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{code}/dados"
+HEADERS = {"User-Agent": "personal-finance/1.0 (uso pessoal)", "Accept": "application/json"}
+# ultimos/N aceita no máximo 20 pontos (acima disso a API responde 400); a Selic diária usa janela de datas
+SERIES = {"selic": (432, "janela", 400), "cdi": (4389, "ultimos", 20), "ipca_mes": (433, "ultimos", 20),
+          "ipca_12m": (13522, "ultimos", 20)}
 TTL = 12 * 3600
 
 
-def _fetch(code: int, n: int) -> list[tuple[str, float]]:
-    resp = requests.get(URL.format(code=code, n=n), timeout=15)
-    resp.raise_for_status()
-    return [(i["data"], float(i["valor"])) for i in resp.json()]
+def _fetch(code: int, mode: str, n: int) -> list[tuple[str, float]]:
+    if mode == "janela":
+        end = date.today()
+        url = BASE.format(code=code) + f"?formato=json&dataInicial={(end - timedelta(days=n)):%d/%m/%Y}&dataFinal={end:%d/%m/%Y}"
+    else:
+        url = BASE.format(code=code) + f"/ultimos/{min(n, 20)}?formato=json"
+    for attempt in range(2):
+        try:
+            resp = requests.get(url, headers=HEADERS, timeout=20)
+            resp.raise_for_status()
+            return [(i["data"], float(i["valor"])) for i in resp.json()]
+        except requests.RequestException:
+            if attempt:
+                raise
+            time.sleep(3)
+    return []
 
 
 def history(force: bool = False) -> dict:
@@ -41,9 +56,9 @@ def history(force: bool = False) -> dict:
     if cached and not force and time.time() - cached.get("ts", 0) < TTL:
         return cached
     data = {"ts": time.time()}
-    for name, (code, n) in SERIES.items():
+    for name, (code, mode, n) in SERIES.items():
         try:
-            data[name] = _fetch(code, n)
+            data[name] = _fetch(code, mode, n)
         except Exception as exc:  # noqa: BLE001 (uma série fora do ar não derruba as outras)
             log.warning("BCB série %s falhou: %s", code, exc)
             data[name] = (cached or {}).get(name, [])

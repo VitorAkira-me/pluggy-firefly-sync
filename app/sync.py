@@ -20,10 +20,11 @@ import logging
 from datetime import date, timedelta
 
 from app.classify import REVIEW_TAG, Classifier, Decision
-from app.clients.firefly import FireflyClient
+from app.clients.firefly import FireflyClient, fingerprint
 from app.clients.llm import LocalLLM
 from app.clients.pluggy import PluggyClient
 from app.config import Settings, load_account_mapping, load_category_rules_file, load_settings
+from app.ml import merchant_key
 from app.normalize import INSTALLMENT_TAG, INTERNAL_CATEGORY, INTERNAL_TAG, detect_internal, shift_installments, signed_amount
 
 log = logging.getLogger("sync")
@@ -94,14 +95,21 @@ def sync(dry_run: bool = False) -> dict:
     internal = detect_internal(batch)
     installments = shift_installments(batch)
     # parcelas futuras podem ter sido gravadas meses à frente: a janela de ids conhecidos cobre até 4 anos
-    known = firefly.existing_external_ids(today - timedelta(days=settings.sync_since_days + 3), today + timedelta(days=1460))
+    known, prints = firefly.existing_index(today - timedelta(days=settings.sync_since_days + 3), today + timedelta(days=1460))
     classifier = build_classifier(firefly, settings, use_llm=False)
 
-    created = skipped = failed = 0
+    created = skipped = failed = same_content = 0
     for _, target, txn in batch:
         external_id = f"pluggy:{txn['id']}"
         if external_id in known:
             skipped += 1
+            continue
+        eff_date = (installments.get(txn["id"]) or {}).get("date") or txn["date"][:10]
+        fp = fingerprint(target["firefly_account_id"], eff_date, txn["amount"],
+                         txn.get("description") or txn.get("descriptionRaw"), merchant_key)
+        if prints[fp] > 0:  # mesma transação já gravada com outro id (Pluggy trocou os ids)
+            prints[fp] -= 1
+            same_content += 1
             continue
         desc = txn.get("description") or txn.get("descriptionRaw") or ""
         amount = signed_amount(txn, target)
@@ -123,9 +131,11 @@ def sync(dry_run: bool = False) -> dict:
             failed += 1
             log.error("falhou %s (%s): %s", external_id, desc, exc)
 
-    result = {"created": created, "skipped": skipped, "failed": failed, "internal": len(internal),
+    result = {"created": created, "skipped": skipped + same_content, "same_content": same_content,
+              "failed": failed, "internal": len(internal),
               "installments_shifted": sum(1 for v in installments.values() if v), "by_stage": dict(classifier.stats)}
-    print(f"Sync: {created} criadas, {skipped} já existiam, {failed} falharam, {len(internal)} internas no lote | "
+    print(f"Sync: {created} criadas, {skipped} já existiam, {same_content} iguais com id novo, {failed} falharam, "
+          f"{len(internal)} internas no lote | "
           f"etapas: {result['by_stage']}")
     return result
 

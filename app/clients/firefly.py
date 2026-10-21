@@ -2,10 +2,15 @@
 from __future__ import annotations
 
 import calendar
+from collections import Counter
 from collections.abc import Iterator
 from datetime import date, timedelta
 
 import requests
+
+
+def fingerprint(account_id, date_: str, amount, description, key) -> tuple:
+    return (str(account_id), date_[:10], f"{abs(float(amount or 0)):.2f}", key(description or ""))
 
 
 def next_occurrence(day: int, today: date) -> date:
@@ -51,7 +56,22 @@ class FireflyClient:
     def existing_external_ids(self, start: date, end: date) -> set[str]:
         """Ids externos já gravados no período. Uma consulta paginada por execução do
         sync, em vez de uma busca por transação (era o gargalo no Raspberry Pi)."""
-        return {s["external_id"] for s in self.iter_splits(start, end) if s.get("external_id")}
+        return self.existing_index(start, end)[0]
+
+    def existing_index(self, start: date, end: date) -> tuple[set[str], Counter]:
+        """(ids externos, contagem de "impressões digitais") das transações do período.
+
+        A impressão digital (conta, data, valor, estabelecimento) pega a mesma transação mesmo
+        quando a Pluggy troca os ids (banco reconectado): sem ela, o histórico duplicaria."""
+        from app.ml import merchant_key
+        ids: set[str] = set()
+        prints: Counter = Counter()
+        for s in self.iter_splits(start, end):
+            if s.get("external_id"):
+                ids.add(s["external_id"])
+            acc = s.get("source_id") if s.get("type") == "withdrawal" else s.get("destination_id")
+            prints[fingerprint(acc, str(s.get("date"))[:10], s.get("amount"), s.get("description"), merchant_key)] += 1
+        return ids, prints
 
     def create_transaction(
         self,

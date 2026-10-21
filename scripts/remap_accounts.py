@@ -32,9 +32,19 @@ def _key(name: str) -> str:
     return unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower().strip()
 
 
-def remap(old: dict, accounts: list[dict]) -> tuple[dict, list[str], list[str]]:
-    """Devolve (mapeamento novo, contas antigas sem par, contas novas sem par)."""
-    pool = {(_key(a["name"]), a.get("type") == "CREDIT"): a for a in accounts}
+def remap(old: dict, accounts: list[dict], activity=None) -> tuple[dict, list[str], list[str]]:
+    """Devolve (mapeamento novo, contas antigas sem par, contas novas sem par).
+
+    Nome repetido (ex.: o MASTER BLACK PRIME aparece nos itens Bradesco e BradescoCard): fica a
+    conta com mais lançamentos recentes (`activity(conta) -> int`), que é a que de fato recebe os dados."""
+    pool: dict[tuple, dict] = {}
+    for a in accounts:
+        k = (_key(a["name"]), a.get("type") == "CREDIT")
+        if k in pool:
+            print(f"  nome repetido: {a['name']} (fica a conta com mais lançamentos)", file=sys.stderr)
+            if not activity or activity(a) <= activity(pool[k]):
+                continue
+        pool[k] = a
     used: set[str] = set()
     new_mappings, missing = [], []
     for m in old["mappings"]:
@@ -60,7 +70,17 @@ def main(item_ids: list[str]) -> None:
         print(f"Item {iid[:8]} ({(item.get('connector') or {}).get('name')}): {len(found)} conta(s)", file=sys.stderr)
         accounts += found
     source, old = account_mapping_source()
-    new, missing, extra = remap(old, accounts)
+    cache: dict[str, int] = {}
+
+    def activity(acc: dict) -> int:
+        if acc["id"] not in cache:
+            try:
+                cache[acc["id"]] = len(pluggy.list_transactions(acc["id"], 45))
+            except Exception:  # noqa: BLE001
+                cache[acc["id"]] = 0
+        return cache[acc["id"]]
+
+    new, missing, extra = remap(old, accounts, activity)
     print(f"\nMapeamento atual veio de: {source}", file=sys.stderr)
     print(f"Casadas: {len(new['mappings'])} de {len(old['mappings'])}", file=sys.stderr)
     for name in missing:

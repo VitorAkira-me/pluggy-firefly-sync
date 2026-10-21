@@ -57,7 +57,8 @@ def save_cache(data: dict) -> None:
 
 
 def _sgs_last(codigo: int) -> dict:
-    resp = requests.get(BCB_SGS_URL.format(codigo=codigo, n=1), timeout=15)
+    resp = requests.get(BCB_SGS_URL.format(codigo=codigo, n=1), timeout=20,
+                        headers={"User-Agent": "personal-finance/1.0 (uso pessoal)", "Accept": "application/json"})
     resp.raise_for_status()
     item = resp.json()[0]
     return {"data": item["data"], "valor": float(item["valor"])}
@@ -78,7 +79,9 @@ def fetch_inflation_and_selic() -> dict | None:
             "ipca_12m_pct": ipca_12m["valor"],
             "selic_pct": selic["valor"],
         }
-    except Exception:
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).warning("BCB SGS indisponível: %s", exc)
         return None
 
 

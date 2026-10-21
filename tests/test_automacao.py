@@ -121,3 +121,16 @@ def test_remap_casa_por_nome_e_tipo():
     new, missing, extra = mod.remap(old, accounts)
     assert new["mappings"][0]["pluggy_account_id"] == "novo-1" and new["mappings"][0]["firefly_account_id"] == 5
     assert missing == ["Itau Conta Corrente"] and extra and "Poupança" in extra[0]
+
+
+def test_remap_nome_repetido_fica_com_a_conta_ativa():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("remap", "scripts/remap_accounts.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    old = {"mappings": [{"pluggy_account_id": "x", "pluggy_account_name": "MASTER BLACK PRIME", "firefly_account_id": 7,
+                         "firefly_account_name": "Bradesco Black", "is_credit_card": True}]}
+    accounts = [{"id": "vazio", "name": "MASTER BLACK PRIME", "type": "CREDIT"},
+                {"id": "ativo", "name": "MASTER BLACK PRIME", "type": "CREDIT"}]
+    new, _, _ = mod.remap(old, accounts, activity=lambda a: 40 if a["id"] == "ativo" else 0)
+    assert new["mappings"][0]["pluggy_account_id"] == "ativo"

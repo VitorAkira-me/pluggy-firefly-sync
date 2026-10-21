@@ -25,8 +25,16 @@ class FakeFirefly:
     def __init__(self, *a, **k):
         pass
 
-    def existing_external_ids(self, start, end):
-        return {p["external_id"] for p in FakeFirefly.store}
+    def existing_index(self, start, end):
+        from collections import Counter
+
+        from app.clients.firefly import fingerprint
+        from app.ml import merchant_key
+        prints = Counter(
+            fingerprint(p.get("source_id") if p["type_"] == "withdrawal" else p.get("destination_id"),
+                        p["date_"], p["amount"], p["description"], merchant_key)
+            for p in FakeFirefly.store)
+        return {p["external_id"] for p in FakeFirefly.store}, prints
 
     def iter_splits(self, start, end, type_="all"):
         return iter([])
@@ -69,3 +77,17 @@ def test_payload_marca_revisao_quando_sem_categoria():
     p = sync_mod.to_firefly_payload({"id": "x", "amount": -10, "date": "2026-10-01", "description": "LOJA X"}, target, d)
     assert p["tags"] == ["revisar"] and p["category_name"] is None
     assert "sem categoria" in p["notes"]
+
+
+def test_pluggy_troca_ids_nao_duplica(monkeypatch):
+    """Banco reconectado: mesmas transações com ids novos não podem entrar de novo."""
+    FakeFirefly.store = []
+    run(monkeypatch)
+    original = FakePluggy.list_transactions
+
+    def ids_novos(self, account_id, since_days=7):
+        return [{**t, "id": "novo-" + t["id"]} for t in original(self, account_id, since_days)]
+
+    monkeypatch.setattr(FakePluggy, "list_transactions", ids_novos)
+    r = sync_mod.sync()
+    assert r["created"] == 0 and r["same_content"] == 3 and len(FakeFirefly.store) == 3
