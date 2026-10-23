@@ -78,7 +78,13 @@ em `docs/arquivo/`.
 16. **Zero manutenção manual como padrão.** Fatura aberta é calculada pela Pluggy
     (`app/invoices.py`); o `/fatura` é correção opcional que expira quando a fatura fecha.
     Pokémon TCG é **consumo** (desejo, com teto no orçamento), nunca "investimento".
+    Pix recebido pequeno (até R$ 1.000) é venda de cartas (categoria de entrada "Venda de cartas",
+    só reduz o líquido do Pokémon); Pix enviado para vendedor de cartas é ensinado com `/regra`.
+    Meta de guardar é calculada (`app/savings.py`): `MONTHLY_SAVINGS_TARGET` é só o mínimo.
 17. **O gestor roda na IA local.** Claude (CLI ou chat) é só para desenvolvimento e ajustes.
+18. **Nome de pessoa nunca no repositório** (é público): regra com nome vai pelo `/regra` do bot (estado).
+19. **Data é sempre a de Brasília** (`app/clock.py`); só o agendador usa UTC. Relatório agendado só
+    sai com o dado de ontem completo ou, passado o limite, dizendo quais bancos estão atrasados.
 
 ---
 
@@ -87,10 +93,12 @@ em `docs/arquivo/`.
 ```
 sync (3/3h)      Pluggy -> normalize (internas, parcelas) -> dedupe em lote -> regra/histórico/ML -> Firefly
 review (03:00)   tag "revisar" -> LLM (janela) -> aplica se conf >= 0,80; resto vira fila do /revisar
-manhã (05:00)    report: pode gastar hoje (30 dias), faturas, mês, sinais de preço
+manhã (05:00+)   report: espera todas as conexões da Pluggy atualizarem hoje (dado até ontem, D-1),
+                 tentando de hora em hora até 10:00; roda o sync antes se a Pluggy atualizou depois dele;
+                 pode gastar hoje (30 dias), faturas, mês, sinais de preço, rodapé com a hora do dado
                  advisor: fatos + aula do dia -> LLM -> manchete, observações, ação, aula, pergunta
 domingo (09:00)  insights: semana x média, fora do padrão, assinaturas prováveis
-bot (sempre)     /hoje /gestor /fatura /gasto /revisar /simular /metas /parcelas /pix /mercado /aula
+bot (sempre)     /hoje /gestor /fatura /gasto /revisar /regra /simular /metas /parcelas /pix /mercado /aula
                  texto livre: "gastei 40 no ifood" -> confirmar; perguntas -> LLM com ferramentas
 saúde (04h/16h)  conexões da Pluggy: login, atraso > 36 h, auto-sync desligado, consentimento perto de vencer
 falha 2x seguidas de um job -> alerta no Telegram
@@ -129,7 +137,10 @@ app/
   review.py       passada da madrugada e fila de revisão
   report.py       resumo diário e "pode gastar hoje"
   invoices.py     fatura aberta calculada (faturas fechadas + compras do ciclo + parcelas)
+  savings.py      meta de guardar calculada: sobra típica de 3 meses x folga dos próximos 30 dias
   health.py       saúde das conexões da Pluggy
+  freshness.py    quão atual está o dado de cada conexão (D-1), versão do dado para o cache das faturas
+  clock.py        data e hora de Brasília (o container roda em UTC)
   price_signals.py câmbio, IPCA/Selic, combustível
   facts.py        fatos determinísticos (mês, parcelas, Pix no crédito, Pokémon, metas)
   finmath.py      juros, taxas equivalentes, VP, custo efetivo, metas
@@ -140,7 +151,7 @@ app/
   insights.py     análise semanal
   bot.py          bot de mão dupla
 config/           account_mapping, category_rules (+internal, +categories), price_signals, llm_janelas
-scripts/          validate_config, list_uncategorized, fix_history, remap_accounts (ids novos da Pluggy)
+scripts/          validate_config, list_uncategorized, fix_history, remap_accounts (ids novos da Pluggy), diagnose (faturas), conferir (bot x banco)
 tests/            pytest sem rede
 docs/             arquitetura, ia-local, operacao, decisions/, arquivo/
 ```
@@ -156,8 +167,10 @@ docs/             arquitetura, ia-local, operacao, decisions/, arquivo/
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | sim | |
 | `TELEGRAM_USER_ID` | não | igual ao chat id num chat privado |
 | `ACCOUNT_MAPPING_JSON` | sim* | JSON do mapeamento numa linha (*ou `/data/account_mapping.json`) |
-| `MONTHLY_SAVINGS_TARGET`, `SAFETY_BUFFER` | não | `175.89`, `0` |
-| `REPORT_HOUR_UTC`, `REVIEW_HOUR_UTC`, `SYNC_EVERY_HOURS` | não | `8`, `6`, `3` |
+| `MONTHLY_SAVINGS_TARGET` | não | `175.89`: só o **mínimo**; a meta do mês é calculada (`app/savings.py`) |
+| `SAVINGS_RATE`, `SAFETY_BUFFER` | não | `0.5` (fração da sobra que vira meta), `0` |
+| `REPORT_HOUR_UTC`, `REPORT_DEADLINE_HOUR_UTC` | não | `8` (05:00, primeira tentativa), `13` (10:00, sai mesmo com banco atrasado) |
+| `REVIEW_HOUR_UTC`, `SYNC_EVERY_HOURS` | não | `6`, `3` |
 | `INSIGHTS_WEEKDAY_UTC`, `INSIGHTS_HOUR_UTC` | não | `6` (domingo), `12` |
 | `LLM_BASE_URL` | não | mesmo valor do `LLM_LOCAL_URL` do pokemon-radar (`http://100.x.y.z:11434`) |
 | `LLM_MODEL`, `LLM_TIMEOUT` | não | `qwen2.5:7b-instruct`, `120` |
@@ -198,7 +211,8 @@ explícita do Akira.** Nunca versionar `.env`, `env*.txt`, exports, zips.
 | 1-2 | Sync, relatório, faturas, 30 dias, sinais de preço | feito (set/2026) |
 | 3 | Consolidação, scheduler único, dedupe em lote, internas e parcelas | feito (main b69d5e7) |
 | 4 | Gestor com IA local, bot de mão dupla, revisão com botões, aulas | feito (main b69d5e7) |
-| 4.1 | Fatura automática, Black 50%, saúde da Pluggy, bot só privado, mapeamento fora do Git | branch `automacao` |
+| 4.1 | Fatura automática, Black 50%, saúde da Pluggy, bot só privado, mapeamento fora do Git | feito (main 5dfecf8) |
+| 4.2 | Meta de guardar calculada, pagamento por boleto no cartão, vendas de cartas, /regra, BCB parcial, relatório D-1 (espera a Pluggy), data de Brasília | a publicar |
 | 5 | Orçamentos por categoria no Firefly, metas com prazo, fechamento mensal | próxima |
 | 6 | Comparar modelos com as correções como conjunto de teste; alertas em tempo real | ideia |
 

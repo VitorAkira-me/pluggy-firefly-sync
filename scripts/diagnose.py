@@ -13,7 +13,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import invoices  # noqa: E402
+from app import (
+    clock,  # noqa: E402
+    invoices,  # noqa: E402
+)
 from app.clients.pluggy import PluggyClient  # noqa: E402
 from app.config import load_account_mapping, load_settings  # noqa: E402
 from app.normalize import shift_installments  # noqa: E402
@@ -49,8 +52,9 @@ def cards(pluggy: PluggyClient, today: date) -> None:
         shifted = shift_installments([("c", {"is_credit_card": True}, t) for t in txns])
         inside = [t for t in txns
                   if cycle["last_close"] < invoices._date((shifted.get(t["id"]) or {}).get("date") or t["date"]) <= cycle["next_close"]]
+        totals = {float(b["totalAmount"]) for b in bills if b.get("totalAmount")}
         print(f"no ciclo: {len(inside)} lançamentos, fatura calculada R$ "
-              f"{invoices.open_amount(txns, cycle['last_close'], cycle['next_close']):.2f}")
+              f"{invoices.open_amount(txns, cycle['last_close'], cycle['next_close'], totals):.2f}")
         for t in sorted(inside, key=lambda t: -abs(float(t['amount'])))[:6]:
             print(f"   {t['date'][:10]} {float(t['amount']):>9.2f}  {(t.get('description') or '')[:40]}")
 
@@ -70,6 +74,6 @@ def bcb() -> None:
 
 if __name__ == "__main__":
     s = load_settings()
-    cards(PluggyClient(s.pluggy_client_id, s.pluggy_client_secret), date.today())
+    cards(PluggyClient(s.pluggy_client_id, s.pluggy_client_secret), clock.today())
     print()
     bcb()

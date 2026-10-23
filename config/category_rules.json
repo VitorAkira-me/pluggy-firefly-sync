@@ -1,6 +1,20 @@
 {
-  "_comment": "'rules': texto contido na descrição (sem diferenciar maiúsculas) -> categoria; a primeira que bater vence. 'internal': textos que marcam movimentação entre contas próprias (pagamento de fatura, Pix no crédito, aplicação automática); viram categoria 'Transferência interna' e ficam fora de todo relatório. Pagamentos de fatura também são achados por pareamento de valor.",
+  "_comment": "'rules': texto contido na descrição (sem diferenciar maiúsculas) -> categoria; a primeira que bater vence. 'internal': textos que marcam movimentação entre contas próprias (pagamento de fatura, Pix no crédito, aplicação automática); viram categoria 'Transferência interna' e ficam fora de todo relatório. Pagamentos de fatura também são achados por pareamento de valor. Opcionais por regra: 'tipo' ('entrada' ou 'saida') e 'max' (valor máximo). 'income_categories': categorias de entrada (vendas de cartas, reembolsos), fora da lista que a IA usa para gastos. Nomes de pessoas nunca aqui (repositório público): use /regra no bot.",
   "rules": [
+    {
+      "match": "pix recebido",
+      "category": "Venda de cartas",
+      "tipo": "entrada",
+      "max": 1000
+    },
+    {
+      "match": "multa contratual",
+      "category": "Taxas e juros"
+    },
+    {
+      "match": "encargos",
+      "category": "Taxas e juros"
+    },
     {
       "match": "amazon prime",
       "category": "Assinaturas",
@@ -190,5 +204,12 @@
     "Serviços",
     "Taxas e juros",
     "Rendimentos"
+  ],
+  "income_categories": [
+    "Salário",
+    "Venda de cartas",
+    "Reembolso",
+    "Rendimentos",
+    "Outras entradas"
   ]
 }

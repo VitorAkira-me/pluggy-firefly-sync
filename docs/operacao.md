@@ -27,6 +27,8 @@ python scripts/validate_config.py
 python scripts/fix_history.py [--apply]   # corrige internas, parcelas e regras no histórico
 python -m app.review --no-llm             # remonta a fila do /revisar sem IA
 python -m app.advisor --no-send           # imprime o gestor do dia
+python scripts/conferir.py                # bot x banco: hora do dado de cada conexão, saldos e faturas
+python -m app.report --agora              # manda o resumo agora, mesmo com banco atrasado
 ```
 
 Estado (fora do Firefly) fica em `/data/state.sqlite` no volume `personal_finance_data`:

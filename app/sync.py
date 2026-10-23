@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import argparse
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
+from app import clock, state
 from app.classify import REVIEW_TAG, Classifier, Decision
 from app.clients.firefly import FireflyClient, fingerprint
 from app.clients.llm import LocalLLM
@@ -67,7 +68,7 @@ def to_firefly_payload(txn: dict, target: dict, decision: Decision, *, internal_
 
 
 def build_classifier(firefly: FireflyClient, settings: Settings, use_llm: bool = False) -> Classifier:
-    today = date.today()
+    today = clock.today()
     history = [s for s in firefly.iter_splits(today - timedelta(days=HISTORY_DAYS), today, "withdrawal")
                if s.get("category_name") != INTERNAL_CATEGORY]
     llm = LocalLLM(settings.llm_base_url, settings.llm_model, settings.llm_timeout) if (use_llm and settings.llm_enabled) else None
@@ -90,7 +91,7 @@ def sync(dry_run: bool = False) -> dict:
     pluggy = PluggyClient(settings.pluggy_client_id, settings.pluggy_client_secret)
     firefly = FireflyClient(settings.firefly_base_url, settings.firefly_token)
 
-    today = date.today()
+    today = clock.today()
     batch = fetch_batch(pluggy, mapping, settings.sync_since_days)
     internal = detect_internal(batch)
     installments = shift_installments(batch)
@@ -134,6 +135,8 @@ def sync(dry_run: bool = False) -> dict:
     result = {"created": created, "skipped": skipped + same_content, "same_content": same_content,
               "failed": failed, "internal": len(internal),
               "installments_shifted": sum(1 for v in installments.values() if v), "by_stage": dict(classifier.stats)}
+    if not dry_run:
+        state.put("last_sync_at", clock.now().isoformat())
     print(f"Sync: {created} criadas, {skipped} já existiam, {same_content} iguais com id novo, {failed} falharam, "
           f"{len(internal)} internas no lote | "
           f"etapas: {result['by_stage']}")

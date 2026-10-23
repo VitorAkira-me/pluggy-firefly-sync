@@ -13,7 +13,7 @@ import argparse
 import logging
 from datetime import date, timedelta
 
-from app import state
+from app import clock, state
 from app.classify import REVIEW_TAG
 from app.clients.firefly import FireflyClient
 from app.config import load_settings
@@ -41,7 +41,7 @@ def apply_category(ff: FireflyClient, item: dict, category: str, note: str) -> N
 def run(use_llm: bool = True) -> dict:
     s = load_settings()
     ff = FireflyClient(s.firefly_base_url, s.firefly_token)
-    today = date.today()
+    today = clock.today()
     items = pending(ff, today)
     classifier = build_classifier(ff, s, use_llm=use_llm)
     applied, queue = 0, []

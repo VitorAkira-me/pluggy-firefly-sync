@@ -16,12 +16,11 @@ uma falhar, as outras seguem normalmente e o bloco mostra "indisponível" só na
 item: nunca derruba o relatório inteiro (ver build_block(), chamado com try/except
 extra pelo daily_report.py por segurança)."""
 import re
-from datetime import date
 from io import BytesIO
 
 import requests
 
-from app import state
+from app import clock, state
 from app.config import load_price_signals_config
 
 BCB_SGS_URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados/ultimos/{n}?formato=json"
@@ -34,6 +33,7 @@ ANP_LISTING_URL = (
 IPCA_MENSAL_CODE = 433
 IPCA_12M_CODE = 13522
 SELIC_META_CODE = 432
+CDI_CODE = 4389
 
 
 DEFAULT_CONFIG = {
@@ -56,33 +56,54 @@ def save_cache(data: dict) -> None:
     state.put("price_signals_cache", data)
 
 
-def _sgs_last(codigo: int) -> dict:
-    resp = requests.get(BCB_SGS_URL.format(codigo=codigo, n=1), timeout=20,
+def _sgs(codigo: int, n: int = 1) -> list[dict]:
+    resp = requests.get(BCB_SGS_URL.format(codigo=codigo, n=n), timeout=20,
                         headers={"User-Agent": "personal-finance/1.0 (uso pessoal)", "Accept": "application/json"})
     resp.raise_for_status()
-    item = resp.json()[0]
-    return {"data": item["data"], "valor": float(item["valor"])}
+    return [{"data": i["data"], "valor": float(i["valor"])} for i in resp.json()]
+
+
+def _sgs_last(codigo: int) -> dict:
+    return _sgs(codigo)[-1]
+
+
+def _try(fn, *args):
+    try:
+        return fn(*args)
+    except Exception as exc:  # noqa: BLE001 (o BCB dá 502 de vez em quando; cada série é independente)
+        import logging
+        logging.getLogger(__name__).warning("BCB SGS série %s indisponível: %s", args[0] if args else "?", exc)
+        return None
 
 
 def fetch_inflation_and_selic() -> dict | None:
-    """IPCA mensal, IPCA acumulado 12 meses e Selic meta, via API SGS do Banco
-    Central (testada ao vivo em 23/09/2026: funciona, JSON simples [{"data":...,
-    "valor":...}]). Se qualquer uma das três séries falhar, devolve None (as outras
-    duas não são aproveitadas parcialmente, pra não montar uma frase incompleta)."""
-    try:
-        ipca_mensal = _sgs_last(IPCA_MENSAL_CODE)
-        ipca_12m = _sgs_last(IPCA_12M_CODE)
-        selic = _sgs_last(SELIC_META_CODE)
-        return {
-            "ipca_mensal_pct": ipca_mensal["valor"],
-            "ipca_mensal_data": ipca_mensal["data"],
-            "ipca_12m_pct": ipca_12m["valor"],
-            "selic_pct": selic["valor"],
-        }
-    except Exception as exc:  # noqa: BLE001
-        import logging
-        logging.getLogger(__name__).warning("BCB SGS indisponível: %s", exc)
+    """IPCA do mês, IPCA 12 meses e Selic pela API SGS do Banco Central.
+
+    O SGS dá 502 numa série e responde a outra no mesmo minuto (visto em 21/10/2026), então
+    cada série cai num substituto em vez de derrubar o bloco inteiro:
+    - IPCA 12 meses (13522) -> composto dos últimos 12 IPCA mensais (433);
+    - Selic meta (432) -> CDI (4389), que anda colado nela (cerca de 0,10 p.p. abaixo).
+    Só devolve None se o IPCA do mês também falhar."""
+    mensal = _try(_sgs, IPCA_MENSAL_CODE, 12)
+    if not mensal:
         return None
+    out = {"ipca_mensal_pct": mensal[-1]["valor"], "ipca_mensal_data": mensal[-1]["data"]}
+    doze = _try(_sgs_last, IPCA_12M_CODE)
+    if doze:
+        out["ipca_12m_pct"] = doze["valor"]
+    elif len(mensal) == 12:
+        acc = 1.0
+        for m in mensal:
+            acc *= 1 + m["valor"] / 100
+        out["ipca_12m_pct"] = round((acc - 1) * 100, 2)
+    selic = _try(_sgs_last, SELIC_META_CODE)
+    if selic:
+        out["selic_pct"], out["juro_rotulo"] = selic["valor"], "Selic"
+    else:
+        cdi = _try(_sgs_last, CDI_CODE)
+        if cdi:
+            out["selic_pct"], out["juro_rotulo"] = cdi["valor"], "CDI"
+    return out
 
 
 def fetch_usd() -> dict | None:
@@ -151,7 +172,7 @@ def fetch_fuel_prices() -> dict | None:
         cache["fuel"] = {
             "gasoline_avg": result.get("gasoline_avg"),
             "ethanol_avg": result.get("ethanol_avg"),
-            "fetched_at": date.today().isoformat(),
+            "fetched_at": clock.today().isoformat(),
         }
         save_cache(cache)
         return result
@@ -285,10 +306,12 @@ def format_price_block(usd: dict | None, fuel: dict | None, inflation: dict | No
         lines.append("💵 Câmbio: indisponível hoje")
 
     if inflation:
-        lines.append(
-            f"📊 IPCA do mês: {inflation['ipca_mensal_pct']:.2f}% "
-            f"(12 meses: {inflation['ipca_12m_pct']:.2f}%) | Selic: {inflation['selic_pct']:.2f}%"
-        )
+        line = f"📊 IPCA do mês: {inflation['ipca_mensal_pct']:.2f}%"
+        if inflation.get("ipca_12m_pct") is not None:
+            line += f" (12 meses: {inflation['ipca_12m_pct']:.2f}%)"
+        if inflation.get("selic_pct") is not None:
+            line += f" | {inflation.get('juro_rotulo', 'Selic')}: {inflation['selic_pct']:.2f}%"
+        lines.append(line)
     else:
         lines.append("📊 Inflação/Selic: indisponível hoje")
 

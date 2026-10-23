@@ -5,7 +5,7 @@ O que faz (só nas transações importadas da Pluggy, external_id "pluggy:..."):
    próprias, aplicação automática) com a categoria "Transferência interna" e a tag "interno";
 2. espalha parcelas que vieram todas na data da compra (ex.: 10x no mesmo dia) para o mês
    em que cada uma pesa, com a tag "parcela";
-3. aplica as regras de config/category_rules.json no que está sem categoria.
+3. aplica as regras (config/category_rules.json e as do bot) no que está sem categoria, saídas e entradas.
 
 Por padrão só MOSTRA o plano. Para gravar: `python scripts/fix_history.py --apply`.
 Rodar de novo é seguro (o que já está certo é ignorado).
@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.classify import user_rules  # noqa: E402
+from app import clock  # noqa: E402
+from app.classify import rule_matches, user_rules  # noqa: E402
 from app.clients.firefly import FireflyClient  # noqa: E402
 from app.config import load_account_mapping, load_category_rules, load_settings  # noqa: E402
 from app.normalize import (  # noqa: E402
@@ -60,9 +61,10 @@ def plan(splits: list[dict], card_ids: set[int]) -> list[tuple[dict, dict, str]]
             upd["tags"] = [t for t in tags if t != "revisar"] + ([INTERNAL_TAG] if INTERNAL_TAG not in tags else [])
             why.append(f"interno ({internal[jid]})")
         elif jid not in internal and not s.get("category_name"):
-            low = (s.get("description") or "").lower()
-            rule = next((r for r in rules if r["_match"] in low), None)
-            if rule and s.get("type") == "withdrawal":
+            desc, value = s.get("description") or "", float(s.get("amount") or 0)
+            expense = s.get("type") == "withdrawal"
+            rule = next((r for r in rules if rule_matches(r, desc, value, expense)), None)
+            if rule and s.get("type") in ("withdrawal", "deposit"):
                 upd["category_name"] = rule["category"]
                 why.append(f"regra '{rule['match']}'")
         sh = shifts.get(jid)
@@ -79,7 +81,7 @@ def main(apply: bool, days: int) -> None:
     s = load_settings()
     ff = FireflyClient(s.firefly_base_url, s.firefly_token)
     card_ids = {m["firefly_account_id"] for m in load_account_mapping().values() if m.get("is_credit_card")}
-    today = date.today()
+    today = clock.today()
     splits = [x for x in ff.iter_splits(today - timedelta(days=days), today + timedelta(days=400), "all")
               if str(x.get("external_id") or "").startswith("pluggy:") and x.get("type") in ("withdrawal", "deposit")]
     changes = plan(splits, card_ids)

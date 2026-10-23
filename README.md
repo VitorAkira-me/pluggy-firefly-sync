@@ -18,7 +18,7 @@ Tudo pelo Telegram (@akira_financas_bot). Poucas mensagens fixas, o resto sob de
 
 | Quando | Mensagem |
 |---|---|
-| 05:00 todo dia | **Resumo** (pode gastar hoje, guardar, faturas, mês, sinais de preço) e **Gestor** (manchete, 2 a 4 observações, ação de hoje, aula do dia e uma pergunta) |
+| 05:00 a 10:00 todo dia (assim que todos os bancos atualizam na Pluggy) | **Resumo** (pode gastar hoje, guardar, faturas, mês, sinais de preço) e **Gestor** (manchete, 2 a 4 observações, ação de hoje, aula do dia e uma pergunta) |
 | domingo 09:00 | Análise da semana |
 | quando precisa | Alerta se algum job falhar 2 vezes seguidas |
 
@@ -31,7 +31,8 @@ Você atualiza respondendo o bot:
 | `/revisar` | classificar pendências com botões; "📌 Sempre" vira regra |
 | `/hoje`, `/gestor` | resumo e gestor na hora |
 | `/simular 1200 120 10` | à vista x parcelado com o CDI do dia |
-| `/metas`, `/parcelas`, `/pix`, `/mercado`, `/aula juros` | consultas e aulas |
+| `/regra nome da pessoa #Pokémon TCG` | ensinar uma categoria (fica só no servidor, nunca no GitHub) |
+| `/metas`, `/parcelas`, `/pix`, `/mercado`, `/aula juros` | meta de guardar do mês, consultas e aulas |
 | qualquer pergunta | "quanto gastei com Pokémon este mês?" (IA com ferramentas, se a GPU estiver livre) |
 
 ## Subir do zero (Portainer, ~10 min)
@@ -42,7 +43,7 @@ Você atualiza respondendo o bot:
    - URL: `https://github.com/VitorAkira-me/pluggy-firefly-sync`, branch `main`, compose `docker-compose.yml`.
 3. **Environment variables** (os nomes estão em [`.env.example`](.env.example)):
    `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `FIREFLY_TOKEN`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-   Opcionais: `MONTHLY_SAVINGS_TARGET`, `SAFETY_BUFFER`, `LLM_BASE_URL`, `LLM_MODEL`.
+   Opcionais: `MONTHLY_SAVINGS_TARGET` (mínimo da meta), `SAVINGS_RATE` (padrão 0.5), `SAFETY_BUFFER`, `LLM_BASE_URL`, `LLM_MODEL`.
 4. **Configurar contas.** Copie [`config/account_mapping.example.json`](config/account_mapping.example.json)
    para `config/account_mapping.json`, preencha os IDs da sua instalação e mantenha esse arquivo
    fora do GitHub. O arquivo real é ignorado pelo Git de propósito.

@@ -55,8 +55,10 @@ class Settings:
     telegram_user_id: str
     monthly_savings_target: float
     safety_buffer: float
+    savings_rate: float
     report_hour_utc: int
     review_hour_utc: int
+    report_deadline_hour_utc: int
     insights_weekday_utc: int
     insights_hour_utc: int
     sync_every_hours: int
@@ -82,7 +84,9 @@ def load_settings() -> Settings:
         telegram_user_id=_env("TELEGRAM_USER_ID") or _env("TELEGRAM_CHAT_ID"),
         monthly_savings_target=_float("MONTHLY_SAVINGS_TARGET", 0.0),
         safety_buffer=_float("SAFETY_BUFFER", 0.0),
+        savings_rate=_float("SAVINGS_RATE", 0.5),
         report_hour_utc=_int("REPORT_HOUR_UTC", 8),  # 05:00 em Brasília
+        report_deadline_hour_utc=_int("REPORT_DEADLINE_HOUR_UTC", 13),  # 10:00: sai mesmo com banco atrasado
         review_hour_utc=_int("REVIEW_HOUR_UTC", 6),  # 03:00 em Brasília (janela da GPU)
         insights_weekday_utc=_int("INSIGHTS_WEEKDAY_UTC", 6),  # 0=segunda ... 6=domingo
         insights_hour_utc=_int("INSIGHTS_HOUR_UTC", 12),  # 09:00 em Brasília

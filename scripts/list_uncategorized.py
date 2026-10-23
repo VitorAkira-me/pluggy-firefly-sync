@@ -8,11 +8,12 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app import clock  # noqa: E402
 from app.clients.firefly import FireflyClient  # noqa: E402
 from app.config import load_settings  # noqa: E402
 from app.ml import merchant_key  # noqa: E402
@@ -21,7 +22,7 @@ from app.ml import merchant_key  # noqa: E402
 def main(days: int) -> None:
     s = load_settings()
     ff = FireflyClient(s.firefly_base_url, s.firefly_token)
-    today = date.today()
+    today = clock.today()
     rows = [
         sp for sp in ff.iter_splits(today - timedelta(days=days), today, "withdrawal")
         if not sp.get("category_name") or "revisar" in (sp.get("tags") or [])

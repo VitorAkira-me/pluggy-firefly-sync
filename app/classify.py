@@ -32,6 +32,19 @@ def user_rules() -> list[dict]:
         return []
 
 
+def rule_matches(rule: dict, desc: str, amount: float = 0.0, expense: bool = True) -> bool:
+    """Regra casa pelo texto e, se tiver, pelo sentido ("tipo": "entrada"/"saida") e valor máximo ("max").
+
+    Ex.: {"match": "pix recebido", "category": "Venda de cartas", "tipo": "entrada", "max": 1000}:
+    Pix pequeno recebido é venda de carta; um Pix grande fica para você decidir."""
+    if rule["_match"] not in desc.lower():
+        return False
+    tipo = rule.get("tipo")
+    if tipo and tipo != ("saida" if expense else "entrada"):
+        return False
+    return not (rule.get("max") is not None and abs(amount) > float(rule["max"]))
+
+
 def add_user_rule(match: str, category: str) -> None:
     rules = [r for r in (state.get("user_rules", []) or []) if r["match"].lower() != match.lower()]
     rules.insert(0, {"match": match.lower(), "category": category})
@@ -99,10 +112,9 @@ class Classifier:
         self.stats: Counter = Counter()
 
     # ---------------------------------------------------------------- etapas
-    def _by_rule(self, desc: str) -> Decision | None:
-        low = desc.lower()
+    def _by_rule(self, desc: str, amount: float = 0.0, expense: bool = True) -> Decision | None:
         for rule in self.rules:
-            if rule["_match"] in low:
+            if rule_matches(rule, desc, amount, expense):
                 return Decision(rule["category"], rule.get("expense_account"), "regra", 1.0, f"contém '{rule['match']}'")
         return None
 
@@ -163,11 +175,11 @@ class Classifier:
         Entrada sem regra fica sem categoria, mas sem tag de revisão."""
         desc = description or ""
         if not expense:
-            decision = self._by_rule(desc) or Decision(None, None, "entrada", 0.0, "entrada sem regra")
+            decision = self._by_rule(desc, amount, expense=False) or Decision(None, None, "entrada", 0.0, "entrada sem regra")
             self.stats[decision.stage] += 1
             return decision
         decision = (
-            self._by_rule(desc)
+            self._by_rule(desc, amount)
             or self._by_history(desc)
             or self._by_ml(desc)
             or self._by_llm(desc, amount, date_)

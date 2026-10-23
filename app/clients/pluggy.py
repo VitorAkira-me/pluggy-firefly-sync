@@ -9,9 +9,11 @@ Limitações conhecidas da Pluggy (não são bug nosso):
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 import requests
+
+from app import clock
 
 API_BASE = "https://api.pluggy.ai"
 
@@ -63,7 +65,7 @@ class PluggyClient:
         return self._get("/bills", {"accountId": account_id}).get("results", [])
 
     def list_transactions(self, account_id: str, since_days: int = 7) -> list[dict]:
-        date_from = (date.today() - timedelta(days=since_days)).isoformat()
+        date_from = (clock.today() - timedelta(days=since_days)).isoformat()
         results: list[dict] = []
         path, params = "/v2/transactions", {"accountId": account_id, "dateFrom": date_from}
         while True:

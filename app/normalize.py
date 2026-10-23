@@ -36,6 +36,16 @@ INTERNAL_TAG = "interno"
 INSTALLMENT_TAG = "parcela"
 PAIR_DAYS = 5
 _INST = re.compile(r"(\d{1,2})\s*/\s*(\d{1,2})\s*$")
+# crédito no CARTÃO com estas palavras é pagamento da fatura, nunca estorno de compra
+# ("PAG BOLETO BANCARIO" no Bradesco Black abatia a fatura inteira, visto em 21/10/2026)
+CARD_PAYMENT = re.compile(r"\bpag(amento|to)?\b|boleto|fatura", re.IGNORECASE)
+
+
+def is_card_payment(txn: dict, target: dict) -> bool:
+    """Entrada (crédito) no cartão que é pagamento da fatura."""
+    if not target.get("is_credit_card") or float(txn["amount"]) >= 0:
+        return False
+    return bool(CARD_PAYMENT.search(txn.get("description") or txn.get("descriptionRaw") or ""))
 
 
 def signed_amount(txn: dict, target: dict) -> float:
@@ -61,6 +71,9 @@ def detect_internal(batch: list[tuple[str, dict, dict]]) -> dict[str, str]:
         hit = next((p for p in pats if p in desc), None)
         if hit:
             found[txn["id"]] = f"texto '{hit}'"
+    for _, tgt, txn in batch:
+        if txn["id"] not in found and is_card_payment(txn, tgt):
+            found[txn["id"]] = "pagamento da fatura no cartão"
 
     # o lado da entrada pode já ter sido marcado por texto ("pagamento recebido" no cartão): ele ainda
     # serve para achar o par na conta corrente ("Pagamento de Pix QR Code MERCADO PAGO", por exemplo)

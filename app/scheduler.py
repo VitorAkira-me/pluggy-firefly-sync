@@ -11,8 +11,9 @@ Horários (UTC; Brasília = UTC-3; configuráveis por variável):
 - app.sync      a cada SYNC_EVERY_HOURS (3)
 - app.health    07 e 19 UTC (04:00 e 16:00): conexões da Pluggy (aviso 1x por dia por problema)
 - app.review    REVIEW_HOUR_UTC (6 = 03:00), dentro da janela da GPU
-- app.report    REPORT_HOUR_UTC (8 = 05:00), números do dia
-- app.advisor   logo depois do report: gestor (análise + aula)
+- app.report    a partir de REPORT_HOUR_UTC (8 = 05:00), de hora em hora até todos os bancos terem
+                atualizado hoje na Pluggy (dado até ontem, o D-1) ou até REPORT_DEADLINE_HOUR_UTC (13 = 10:00)
+- app.advisor   logo depois que o report sai: gestor (análise + aula)
 - app.insights  INSIGHTS_WEEKDAY_UTC às INSIGHTS_HOUR_UTC (domingo 12 = 09:00)
 """
 from __future__ import annotations
@@ -59,13 +60,25 @@ def alert(text: str) -> None:
         print(f"alerta não enviado: {exc}", flush=True)
 
 
-def due_jobs(now: datetime, s, last: dict) -> list[str]:
+def _sent_today(job: str) -> bool:
+    from app import clock
+    key = {"app.report": "report_sent_day", "app.advisor": "advisor_sent_day"}[job]
+    try:
+        return state.get(key) == clock.today().isoformat()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def due_jobs(now: datetime, s, last: dict, sent_today=_sent_today) -> list[str]:
+    deadline = getattr(s, "report_deadline_hour_utc", 13)
+    morning = s.report_hour_utc <= now.hour <= max(deadline, s.report_hour_utc)
     keys = {
         "app.sync": (now.date(), now.hour) if now.hour % s.sync_every_hours == 0 else None,
         "app.health": (now.date(), now.hour) if now.hour in (7, 19) else None,  # 04:00 e 16:00 BRT
         "app.review": now.date() if now.hour == getattr(s, "review_hour_utc", 6) else None,
-        "app.report": now.date() if now.hour == s.report_hour_utc else None,
-        "app.advisor": now.date() if now.hour == s.report_hour_utc else None,
+        # de hora em hora na janela da manhã até sair (o report espera a Pluggy atualizar)
+        "app.report": (now.date(), now.hour) if morning and not sent_today("app.report") else None,
+        "app.advisor": (now.date(), now.hour) if morning and not sent_today("app.advisor") else None,
         "app.insights": now.date() if (now.weekday() == s.insights_weekday_utc and now.hour == s.insights_hour_utc) else None,
     }
     jobs = []

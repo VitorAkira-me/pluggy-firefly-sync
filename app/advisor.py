@@ -20,8 +20,8 @@ import logging
 import re
 from datetime import date, timedelta
 
+from app import clock, freshness, lessons, market, state
 from app import facts as F
-from app import lessons, market, state
 from app.clients.firefly import FireflyClient
 from app.clients.llm import LocalLLM
 from app.clients.pluggy import PluggyClient
@@ -52,7 +52,11 @@ SYSTEM = (
     "Use SOMENTE números que aparecem nos FATOS ou no texto da AULA; nunca calcule nada novo. "
     "Não recomende produto financeiro específico nem diga para comprar ou vender ativo. "
     "Pokémon TCG é CONSUMO (hobby, gasto de desejo), não investimento nem negócio: trate o teto mensal do "
-    "orçamento como limite de lazer e nunca justifique compra por possível revenda. "
+    "orçamento como limite de lazer e nunca justifique compra por possível revenda; vendas de cartas "
+    "(pokemon.vendas_mes) só reduzem o líquido, não liberam mais gasto. "
+    "meta_poupanca é calculada pelas contas dele (motivo explica o porquê); se limitada_pela_folga for true, "
+    "explique que este mês o aperto vem das faturas e contas, sem culpa. "
+    "Juros, multa ou encargo (categoria Taxas e juros) é dinheiro perdido: aponte e diga como evitar. "
     "Se algo do que você sugeriu nos últimos dias (campo historico) continua pendente, cobre com gentileza. "
     "manchete: 1 frase. observacoes: 2 a 4 frases curtas, cada uma com um fato e o que ele significa. "
     "acao_do_dia: 1 ação que dá para fazer hoje em até 10 minutos. aula: 3 a 5 frases adaptando a AULA aos fatos. "
@@ -63,11 +67,15 @@ SYSTEM = (
 # --------------------------------------------------------------------- fatos
 def gather(today: date | None = None) -> dict:
     s = load_settings()
-    today = today or date.today()
+    today = today or clock.today()
     ff = FireflyClient(s.firefly_base_url, s.firefly_token)
     pluggy = PluggyClient(s.pluggy_client_id, s.pluggy_client_secret)
     splits = list(ff.iter_splits(today - timedelta(days=180), today + timedelta(days=365), "all"))
-    report = compute_report(pluggy, ff, load_account_mapping(), s.monthly_savings_target, s.safety_buffer, today)
+    mapping = load_account_mapping()
+    conns = freshness.connections(pluggy, mapping)
+    report = compute_report(pluggy, ff, mapping, s.monthly_savings_target, s.safety_buffer, today,
+                            savings_rate=s.savings_rate, data_version=freshness.version(conns))
+    report["bancos_atrasados"] = [c["banco"] for c in freshness.stale(conns)]
     try:
         mk = market.snapshot()
     except Exception as exc:  # noqa: BLE001
@@ -75,7 +83,8 @@ def gather(today: date | None = None) -> dict:
         mk = {}
     budgets = {b["name"]: b["monthly"] for b in ff.list_budgets()}
     rate = annual_to_monthly(mk.get("cdi_aa", 0) or 0)
-    return build_facts(splits, report, mk, budgets, ff.list_piggy_banks(), s.monthly_savings_target, rate, today)
+    meta = (report.get("savings_plan") or {}).get("meta_mes", s.monthly_savings_target)
+    return build_facts(splits, report, mk, budgets, ff.list_piggy_banks(), meta, rate, today)
 
 
 def build_facts(splits, report, mk, budgets, piggies, monthly_saving, rate_am, today) -> dict:
@@ -93,12 +102,14 @@ def build_facts(splits, report, mk, budgets, piggies, monthly_saving, rate_am, t
         "faturas_30d": report.get("cards_due_total"),
         "faturas_vencendo_5_dias": [{"cartao": c["name"], "valor": c["amount"], "vence": c["due_date"]} for c in due_soon],
         "faturas_desatualizadas": stale,
+        "bancos_sem_atualizar_hoje": report.get("bancos_atrasados", []),
         "mes": F.month_summary(splits, today),
         "parcelas_futuras": F.installments_ahead(splits, today),
         "pix_credito": F.pix_credit_costs(splits, today=today),
         "pokemon": F.pokemon_month(splits, today, budgets.get(F.POKEMON)),
         "maiores_estabelecimentos_30d": F.top_merchants(splits, today - timedelta(days=29), today),
         "metas": F.goals_progress(piggies, monthly_saving, rate_am),
+        "meta_poupanca": {k: v for k, v in (report.get("savings_plan") or {}).items() if k != "meses"},
         "mercado": mk,
         "a_revisar": review,
         "valores_informados_pelo_bot": invoices,
@@ -171,6 +182,15 @@ def rule_based(f: dict, lesson: lessons.Lesson) -> dict:
     if p.get("orcamento") and p.get("uso_orcamento_pct") is not None:
         obs.append(f"Pokémon TCG: {fmt_brl(p['gasto_mes'])} no mês, {p['uso_orcamento_pct']:.0f}% do orçamento de "
                    f"{fmt_brl(p['orcamento'])}.")
+    if f.get("bancos_sem_atualizar_hoje"):
+        obs.append("Ainda sem atualizar hoje na Pluggy: " + ", ".join(f["bancos_sem_atualizar_hoje"])
+                   + "; os números desses bancos estão atrasados.")
+    meta = f.get("meta_poupanca") or {}
+    if meta.get("meta_mes") is not None:
+        obs.append(f"Meta de guardar no mês: {fmt_brl(meta['meta_mes'])} ({meta['motivo']}).")
+    fees = m["categorias"].get("Taxas e juros")
+    if fees:
+        obs.append(f"Você pagou {fmt_brl(fees)} em juros, multa ou encargo no mês; pagar até o vencimento zera isso.")
     if f["pix_credito"]:
         taxa = sum(x["taxa_paga"] for x in f["pix_credito"])
         obs.append(f"Pix no crédito custou {fmt_brl(taxa)} em taxas nos últimos 60 dias.")
@@ -225,7 +245,10 @@ def format_message(r: dict, lesson: lessons.Lesson, origin: str, today: date) ->
 
 def main(send: bool = True, priority: str = "lote") -> str:
     s = load_settings()
-    today = date.today()
+    today = clock.today()
+    if send and priority == "lote" and state.get("report_sent_day") != today.isoformat():
+        print("gestor adiado: o resumo do dia ainda não saiu (esperando a Pluggy atualizar)")
+        return ""
     f = gather(today)
     lesson = lessons.pick(triggers(f))
     llm = LocalLLM(s.llm_base_url, s.llm_model, s.llm_timeout) if s.llm_enabled else None
@@ -235,6 +258,8 @@ def main(send: bool = True, priority: str = "lote") -> str:
     if send:
         send_message(s.telegram_bot_token, s.telegram_chat_id, text)
         lessons.mark_taught(lesson)
+        if priority == "lote":
+            state.put("advisor_sent_day", today.isoformat())
         state.log_event("insight", {"manchete": result["manchete"], "acao": result["acao_do_dia"], "origem": origin})
         state.put("ultima_aula", {"slug": lesson.slug, "titulo": lesson.title, "pergunta": result.get("pergunta"),
                                   "dia": today.isoformat()})

@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import requests
 
-from app import state
+from app import clock, state
 from app.finmath import real_rate
 
 log = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ TTL = 12 * 3600
 
 def _fetch(code: int, mode: str, n: int) -> list[tuple[str, float]]:
     if mode == "janela":
-        end = date.today()
+        end = clock.today()
         url = BASE.format(code=code) + f"?formato=json&dataInicial={(end - timedelta(days=n)):%d/%m/%Y}&dataFinal={end:%d/%m/%Y}"
     else:
         url = BASE.format(code=code) + f"/ultimos/{min(n, 20)}?formato=json"

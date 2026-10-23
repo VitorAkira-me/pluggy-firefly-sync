@@ -9,11 +9,13 @@ import re
 from collections import defaultdict
 from datetime import date, timedelta
 
+from app import clock
 from app.finmath import effective_monthly_cost
 from app.ml import merchant_key
 from app.normalize import INSTALLMENT_TAG, INTERNAL_CATEGORY
 
 POKEMON = "Pokémon TCG"
+CARD_SALES = "Venda de cartas"
 
 
 def _d(s: dict) -> date:
@@ -86,7 +88,7 @@ def _card_pix_candidates(splits: list[dict], since: date) -> list[dict]:
 def pix_credit_costs(splits: list[dict], days: int = 60, today: date | None = None) -> list[dict]:
     """Custo do Pix no crédito: o que saiu para o recebedor (lado da conta, marcado como interno)
     contra o que o cartão cobra (avulso ou soma das parcelas). Casa por valor até 15% maior e até 3 dias."""
-    today = today or date.today()
+    today = today or clock.today()
     since = today - timedelta(days=days)
     sent = [s for s in splits if is_internal(s) and "pix enviado com cart" in (s.get("description") or "").lower()
             and _d(s) >= since and s.get("type", "withdrawal") == "withdrawal"]
@@ -110,10 +112,14 @@ def pix_credit_costs(splits: list[dict], days: int = 60, today: date | None = No
 
 
 def pokemon_month(splits: list[dict], today: date, budget: float | None) -> dict:
+    """Pokémon é consumo: o gasto conta no orçamento; vendas de cartas (Pix recebido) só mostram o líquido."""
     start = today.replace(day=1)
     spent = sum(_amt(s) for s in spending(splits) if s.get("category_name") == POKEMON and start <= _d(s) <= today)
     future = sum(_amt(s) for s in spending(splits) if s.get("category_name") == POKEMON and _d(s) > today)
-    return {"gasto_mes": round(spent, 2), "parcelas_futuras": round(future, 2), "orcamento": budget,
+    sales = sum(_amt(s) for s in splits if s.get("type") == "deposit" and s.get("category_name") == CARD_SALES
+                and not is_internal(s) and start <= _d(s) <= today)
+    return {"gasto_mes": round(spent, 2), "vendas_mes": round(sales, 2), "liquido_mes": round(spent - sales, 2),
+            "parcelas_futuras": round(future, 2), "orcamento": budget,
             "uso_orcamento_pct": round(spent / budget * 100, 1) if budget else None}
 
 

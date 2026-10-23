@@ -18,6 +18,7 @@ import statistics
 from collections import defaultdict
 from datetime import date, timedelta
 
+from app import clock
 from app.clients.firefly import FireflyClient
 from app.clients.llm import LocalLLM
 from app.clients.telegram import send_message
@@ -154,7 +155,7 @@ def fallback_text(f: dict) -> str:
 def main(send: bool = True, days: int = 180) -> str:
     s = load_settings()
     ff = FireflyClient(s.firefly_base_url, s.firefly_token)
-    today = date.today()
+    today = clock.today()
     from app.facts import spending
     splits = spending(list(ff.iter_splits(today - timedelta(days=days), today, "withdrawal")))
     facts = build_facts(splits, today)

@@ -26,8 +26,8 @@ import unicodedata
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
+from app import clock, finmath, lessons, market, state
 from app import facts as F
-from app import finmath, lessons, market, state
 from app.clients import telegram as tg
 from app.clients.firefly import FireflyClient
 from app.clients.llm import LocalLLM
@@ -45,7 +45,9 @@ HELP = """*Comandos*
 /gasto 35,90 almoço #Alimentação: gasto em dinheiro
 /revisar: classificar pendências com botões
 /simular 1200 120 10: à vista x 10x de 120
-/metas  /parcelas  /pix  /mercado
+/regra nome da pessoa #Pokémon TCG: sempre classificar esse texto assim (vale também para Pix)
+/metas: meta de guardar do mês (calculada pelas contas) e cofrinhos
+/parcelas  /pix  /mercado
 /aula [tema]: uma aula agora (ex.: /aula juros)
 Ou escreva normalmente: "gastei 40 no ifood", "quanto gastei com Pokémon?\""""
 
@@ -95,7 +97,7 @@ class Bot:
     # -- comandos
     def cmd_hoje(self, _args: str) -> None:
         from app.report import main as report_main
-        report_main(send=True)
+        report_main(send=True, force=True)
 
     def cmd_gestor(self, _args: str) -> None:
         from app.advisor import main as advisor_main
@@ -138,7 +140,7 @@ class Bot:
         if not src:
             self.say("Não achei a conta \"Dinheiro\" no Firefly. Crie uma conta de ativo com esse nome e tente de novo.")
             return
-        today = date.today().isoformat()
+        today = clock.today().isoformat()
         self.ff.create_transaction(type_="withdrawal", date_=today, amount=f"{value:.2f}", description=desc,
                                    external_id=f"manual:{int(time.time() * 1000)}", source_id=src,
                                    destination_name=desc[:40], category_name=category, tags=["manual"],
@@ -188,23 +190,43 @@ class Bot:
             f"Melhor: *{r['melhor']}* (diferença hoje R$ {abs(r['diferenca_hoje']):.2f})\n"
             "_Lembre: parcelar ocupa as próximas faturas. Veja /aula parcela._")
 
+    def cmd_regra(self, args: str) -> None:
+        if "#" not in args or not args.split("#", 1)[0].strip() or not args.split("#", 1)[1].strip():
+            self.say("Use: /regra <texto da descrição> #<Categoria>\nEx.: /regra nome do vendedor #Pokémon TCG\n"
+                     "Fica guardada só aqui no servidor (nunca no GitHub) e vale a partir do próximo sync.")
+            return
+        from app.classify import add_user_rule
+        match, cat = (x.strip() for x in args.split("#", 1))
+        add_user_rule(match, cat)
+        state.log_event("regra_bot", {"texto": match, "categoria": cat})
+        self.say(f"📌 Regra salva: \"{match}\" vira *{cat}*. Para corrigir o que já entrou, rode o fix_history "
+                 "ou classifique no /revisar.")
+
     def cmd_metas(self, _args: str) -> None:
         cdi = market.snapshot().get("cdi_aa") or 0
-        rows = F.goals_progress(self.ff.list_piggy_banks(), self.s.monthly_savings_target, finmath.annual_to_monthly(cdi))
+        plan = state.get("savings_plan") or {}
+        meta = plan.get("meta_mes", self.s.monthly_savings_target)
+        rows = F.goals_progress(self.ff.list_piggy_banks(), meta, finmath.annual_to_monthly(cdi))
+        head = [f"🏦 *Guardar este mês: R$ {meta:.2f}*"]
+        if plan:
+            head.append(f"_{plan.get('motivo', '')}_")
+            if plan.get("sobra_tipica") is not None:
+                head.append(f"Sobra típica: R$ {plan['sobra_tipica']:.2f} | folga 30 dias: R$ {plan.get('folga_30d') or 0:.2f}"
+                            f" | mínimo: R$ {plan.get('piso', 0):.2f}")
         if not rows:
-            self.say("Nenhum cofrinho no Firefly ainda.")
+            self.say("\n".join(head + ["", "Nenhum cofrinho no Firefly ainda."]))
             return
-        lines = ["🎯 *Metas*"] + [
+        lines = head + ["", "🎯 *Cofrinhos* (a meta dividida igual entre eles)"] + [
             f"• {r['meta']}: R$ {r['atual']:.2f} de R$ {r['alvo']:.2f}"
             + (f", ~{r['meses_no_ritmo']} meses no ritmo atual" if r["meses_no_ritmo"] else "") for r in rows]
         self.say("\n".join(lines))
 
     def _splits(self, back: int = 180, ahead: int = 365) -> list[dict]:
-        today = date.today()
+        today = clock.today()
         return list(self.ff.iter_splits(today - timedelta(days=back), today + timedelta(days=ahead), "all"))
 
     def cmd_parcelas(self, _args: str) -> None:
-        rows = F.installments_ahead(self._splits(30), date.today(), 12)
+        rows = F.installments_ahead(self._splits(30), clock.today(), 12)
         self.say("🧾 *Parcelas a vencer*\n" + ("\n".join(f"• {r['mes']}: R$ {r['total']:.2f}" for r in rows)
                                                or "Nenhuma parcela futura lançada."))
 
@@ -236,7 +258,7 @@ class Bot:
             return
         lessons.mark_taught(lesson)
         state.put("ultima_aula", {"slug": lesson.slug, "titulo": lesson.title, "pergunta": lesson.question(),
-                                  "dia": date.today().isoformat()})
+                                  "dia": clock.today().isoformat()})
         self.say(f"📚 *{lesson.title}*\n\n{lesson.body}")
 
     def cmd_ajuda(self, _args: str) -> None:
@@ -256,7 +278,7 @@ class Bot:
                            "Tente um comando: /hoje, /parcelas, /pix, /metas, /simular ou /ajuda.")
 
     def tools(self) -> tuple[list[dict], dict]:
-        today = date.today()
+        today = clock.today()
 
         def gastos(inicio: str = "", fim: str = "") -> dict:
             ini = date.fromisoformat(inicio) if inicio else today.replace(day=1)
@@ -301,7 +323,7 @@ class Bot:
         last = state.get("ultima_aula") or {}
         system = (
             "Você é o gestor financeiro pessoal do Akira, em português do Brasil, tom natural, sem travessão. "
-            f"Hoje é {date.today().isoformat()}. Para qualquer número, CHAME uma ferramenta; nunca invente nem calcule "
+            f"Hoje é {clock.today().isoformat()}. Para qualquer número, CHAME uma ferramenta; nunca invente nem calcule "
             "de cabeça. Responda curto (até 8 linhas) e, quando couber, explique o conceito por trás. "
             "Não recomende produto financeiro específico. "
             + (f"A última aula foi \"{last.get('titulo')}\" com a pergunta \"{last.get('pergunta')}\"; se a mensagem "

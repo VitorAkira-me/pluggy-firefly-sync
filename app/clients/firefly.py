@@ -8,6 +8,8 @@ from datetime import date, timedelta
 
 import requests
 
+from app import clock
+
 
 def fingerprint(account_id, date_: str, amount, description, key) -> tuple:
     return (str(account_id), date_[:10], f"{abs(float(amount or 0)):.2f}", key(description or ""))
@@ -148,7 +150,7 @@ class FireflyClient:
     def list_recurring_events(self, days_ahead: int = 30, today: date | None = None) -> list[dict]:
         """Próximas ocorrências (janela de `days_ahead` dias contando hoje) das
         recorrências MENSAIS do Firefly, com direction "expense" ou "income"."""
-        today = today or date.today()
+        today = today or clock.today()
         horizon = today + timedelta(days=days_ahead - 1)
         events = []
         for rec in self._paged("/api/v1/recurrences"):
